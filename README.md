@@ -1,28 +1,37 @@
 # Cetusql
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/cetusql`. To experiment with that code, run `bin/console` for an interactive prompt.
+Command-line based sqlite3 database explorer. The idea is to minimize typing of basic queries/tablenames and column names by allowing for selection of the same.
 
-TODO: Delete this and the text above, and describe your gem
+Some basic features:
+
+- Lists databases in current folder and allows menu for selection.
+- selection of tablenames from list, and of columns names and creates formatted output to a local temp file which 
+is then displayed.
+- bookmark/save common SQL queries and recall later.
+
+Uses sqlite3 gem, readline for editing. In the case of columns, uses `fzf` for selection.
+
+Also, uses 'term-table.rb' for formatting of output. This needs to be placed in your path as an executable.
+
+You may replace that with your own formatter such as `csvlook` or `column -t`. However, these two crash on non-ascii characters on a Mac, so I've written a ruby replacement.
+You can forgo it entirely and just have comma or tab separated output sent to a file.
 
 ## Installation
 
-Add this line to your application's Gemfile:
-
-```ruby
-gem 'cetusql'
-```
-
-And then execute:
-
-    $ bundle
-
-Or install it yourself as:
-
     $ gem install cetusql
+    $ brew install fzf
 
 ## Usage
 
-TODO: Write usage instructions here
+run `cetusql` on the command line.
+
+If no database name is passed, will prompt for one from *.db and *.sqlite files in current directory.
+After selection, one may select one or more tables from a list.
+Then one may select one ore more columns from a list.
+Edit the SQL statement if need be, and press ENTER.
+The output is displayed in vim using a temp file.
+
+Use the menu to change table or database file, or set other options, save last SQL query, select from favorite queries, etc.
 
 ## Development
 
@@ -32,7 +41,7 @@ To install this gem onto your local machine, run `bundle exec rake install`. To 
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/cetusql.
+Bug reports and pull requests are welcome on GitHub at https://github.com/rkumar/cetusql.
 
 
 ## License
