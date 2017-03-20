@@ -20,6 +20,7 @@ You can forgo it entirely and just have comma or tab separated output sent to a 
 
     $ gem install cetusql
     $ brew install fzf
+    $ brew install readline
 
 ## Usage
 
