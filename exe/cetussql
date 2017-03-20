@@ -1,0 +1,267 @@
+#!/usr/bin/env ruby
+# ----------------------------------------------------------------------------- #
+#         File: cetusql
+#  Description: Fast database navigator for sqlite
+#       Author: rkumar
+#         Date: 2013-02-17 - 17:48
+#      License: GPL
+#  Last update: 2017-03-20 12:13
+# ----------------------------------------------------------------------------- #
+#  cetussql  Copyright (C) 2012-2017 rahul kumar
+#  == TODO
+#
+#  Earlier, db routines used global vars. We need to be able to switch between databases
+#   and switch back. So state and history should be maintained across database files.
+#
+#   options : unformatted with tabs output
+#      STDOUT or file. specify output to a file
+#      header off and on
+#
+#
+#  == END TODO
+require 'readline'
+require 'io/wait'
+# http://www.ruby-doc.org/stdlib-1.9.3/libdoc/shellwords/rdoc/Shellwords.html
+#require 'shellwords'
+#require 'fileutils'
+# in ~/work/projects/common/
+require 'cli_utils'
+require 'cli_sqlite'
+# -- requires 1.9.3 or higher for io/wait
+# -- cannot do with Highline since we need a timeout on wait, not sure if HL can do that
+
+## INSTALLATION
+# copy into PATH
+# alias c=~/bin/cetusql
+# c
+VERSION="0.0.0"
+O_CONFIG=true
+CONFIG_FILE="~/.sqlinfo"
+$g_data = {}
+
+$bindings = {}
+$bindings = {
+  "`"   => "main_menu",
+  "="   => "toggle_menu",
+  "!"   => "command_mode",
+  "@"   => "selection_mode_toggle",
+  "M-a" => "select_all",
+  "M-A" => "unselect_all",
+  ","   => "goto_parent_dir",
+  "+"   => "goto_dir",
+  "."   => "pop_dir",
+  ":"   => "subcommand",
+  "'"   => "goto_bookmark",
+  "/"   => "enter_regex",
+  "M-p"   => "prev_page",
+  "M-n"   => "next_page",
+  "SPACE"   => "next_page",
+  "M-f"   => "select_visited_files",
+  "M-d"   => "select_used_dirs",
+  "M-b"   => "select_bookmarks",
+  "M-m"   => "create_bookmark",
+  "M-M"   => "show_marks",
+  "C-c"   => "escape",
+  "ESCAPE"   => "escape",
+  "TAB"   => "views",
+  "C-i"   => "views",
+  "?"   => "dirtree",
+  "ENTER"   => "select_current",
+  "D"   => "delete_file",
+  "M"   => "file_actions most",
+  "Q"   => "quit_command",
+  "RIGHT"   => "column_next",
+  "LEFT"   => "column_next 1",
+  "C-x"   => "file_actions",
+  "M--"   => "columns_incdec -1",
+  "M-+"   => "columns_incdec 1",
+  "S"     =>  "command_file list y ls -lh",
+  "L"     =>  "command_file Page n less",
+  "C-d"   =>  "cursor_scroll_dn",
+  "C-b"   =>  "cursor_scroll_up",
+  "UP"   =>  "cursor_up",
+  "DOWN"   =>  "cursor_dn",
+  "C-SPACE" => "visual_mode_toggle",
+
+  "M-?"   => "print_help",
+  "F1"   => "print_help",
+  "F2"   => "child_dirs",
+  "F3"   => "dirtree",
+  "F4"   => "tree",
+  "S-F1"   => "dirtree",
+  "S-F2"   => "tree"
+
+}
+
+
+
+$selected_files = Array.new
+$bookmarks = {}
+$mode = nil
+$glines=%x(tput lines).to_i
+$gcols=%x(tput cols).to_i
+$grows = $glines - 3
+$pagesize = 60
+$gviscols = 3
+$pagesize = $grows * $gviscols
+$stact = 0
+$editor_mode = true
+$enhanced_mode = true
+$visual_block_start = nil
+$dir_position = {}
+MSCROLL = 10
+$patt=nil
+$ignorecase = true
+$quitting = false
+$modified = $writing = false
+## dir stack for popping
+$visited_dirs = []
+## dirs where some work has been done, for saving and restoring
+$used_dirs = []
+$viewctr = 0
+$history = []
+$sta = $cursor = 0
+$visual_mode = false
+$options = {}
+
+$options[:headers] = "on"
+
+$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}Q#{BOLD_OFF} Quit "
+
+  ## main loop which calls all other programs
+  db = nil
+def run()
+  ctr=0
+  filename, db, tables = change_database ARGV[0]
+  #filename = ARGV[0] || getdbname
+  #if filename
+    #db = Database.new filename
+    #tables = db.tables
+  #end
+  exit unless db
+  #$mode = $current_db
+  # TODO populate readline with earlier SQLS for this database
+  prompt = ""
+  
+
+  while true
+    i = 0
+    system("clear")
+    # title
+    filename = $g_data[:filename]
+    db = $g_data[:db]
+    print "#{GREEN}#{$help}  #{BLUE}cetusql #{VERSION}#{CLEAR}\n"
+    t = "#{$title}"
+    t = t[t.size-$gcols..-1] if t.size >= $gcols
+    #print "#{BOLD}#{t}#{CLEAR}\n"
+    # another query , change table, save sql, change db, select multiple tables
+    # schema, count, sample
+    # ZZZ XXX
+    #print "\r#{_mm}#{$patt} >"
+    ch, text = db_menu
+    #puts
+    break if ch == "q" or ch == "ESCAPE" or ch == "C-c"
+    next
+  end
+  puts "bye"
+  config_write if $writing
+end
+
+def db_menu
+  h = {
+    :d => :change_database,
+    :s => :save_sql,
+    :t => :select_table,
+    :m => :multi_select_table,
+    :l => :list_tables,
+    :o => :output_to,
+    :q => :quit
+  }
+  menu "DB Menu", h
+end
+
+
+# MENU MAIN 
+def main_menu
+  # TODO
+  h = { 
+    :a => :ack,
+    "/" => :ffind,
+    :l => :locate,
+    :v => :viminfo,
+    :z => :z_interface,
+    :d => :child_dirs,
+    :r => :recent_files,
+    :t => :dirtree,
+    "4" => :tree,
+    :s => :sort_menu, 
+    :F => :filter_menu,
+    :c => :command_menu ,
+    :B => :bindkey_ext_command,
+    :M => :newdir,
+    "%" => :newfile,
+    :x => :extras
+  }
+  menu "Main Menu", h
+end
+def change_database filename=nil
+  filename = select_database_name unless filename
+  if filename
+    db = Database.new filename
+    tables = db.tables
+    $g_data[:filename] = filename
+    $g_data[:db] = db
+    $g_data[:tables] = tables
+  end
+  return filename, db, tables
+end
+def multi_select_table
+  db = $g_data[:db]
+  sel_tables = multi_select "select tables ", $g_data[:db].tables
+  columns = []
+  sel_tables.each do |tablename|
+    c = db.columns tablename
+    c.each {|e| columns << "#{tablename}.#{e}" }
+  end
+  sel_columns = multi_select "select columns ", columns
+  #puts sel_columns.size
+  #puts sel_columns.class
+  sel_columns ||= ['*']
+  sql = "SELECT #{sel_columns.join(",")} FROM #{sel_tables.join(',')} ;"
+  puts sql
+  perror "hit a key"
+
+end
+
+def select_table
+  db = $g_data[:db]
+  filename = $g_data[:filename]
+  tablename = select_from "Select table (#{filename})", db.tables
+  unless tablename
+    if confirm("Do you wish to quit ? ")
+      $quitting = true
+      return false
+    end
+  end
+  columns = db.columns tablename
+  sel_columns = multi_select "select column from #{tablename}", columns
+  #puts sel_columns.size
+  #puts sel_columns.class
+  sel_columns ||= ['*']
+  sql = "SELECT #{sel_columns.join(",")} FROM #{tablename} ;"
+  #puts sql
+
+  #Readline::HISTORY.push(sql) 
+  #command = Readline::readline('>', true)
+  command = vared sql, "Edit SQL:"
+  if command.size == 0
+    $quitting = true
+    return false
+  end
+  view_data db, command
+  return true
+end
+
+
+
+run 
