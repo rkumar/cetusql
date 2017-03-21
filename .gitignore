@@ -12,4 +12,6 @@
 t.t
 *.tmp
 *.t
+*.sqlite
+*.db
 
