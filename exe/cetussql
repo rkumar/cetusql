@@ -5,7 +5,7 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-20 12:13
+#  Last update: 2017-03-21 20:21
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
@@ -22,11 +22,12 @@
 require 'readline'
 require 'io/wait'
 # http://www.ruby-doc.org/stdlib-1.9.3/libdoc/shellwords/rdoc/Shellwords.html
-#require 'shellwords'
+require 'shellwords'
+require 'yaml'
 #require 'fileutils'
 # in ~/work/projects/common/
-require 'cli_utils'
-require 'cli_sqlite'
+require 'cetusql/cli_utils'
+require 'cetusql/cli_sqlite'
 # -- requires 1.9.3 or higher for io/wait
 # -- cannot do with Highline since we need a timeout on wait, not sure if HL can do that
 
@@ -36,8 +37,12 @@ require 'cli_sqlite'
 # c
 VERSION="0.0.0"
 O_CONFIG=true
-CONFIG_FILE="~/.sqlinfo"
-$g_data = {}
+CONFIG_FILE=File.expand_path("~/.cetusqlinfo")
+# Using this to store data that has to be used in actions which do not take parameters or return values
+#  when called from a key
+$options = {}
+$options[:headers] = "on"
+$options[:output_to] = nil
 
 $bindings = {}
 $bindings = {
@@ -106,25 +111,17 @@ $gviscols = 3
 $pagesize = $grows * $gviscols
 $stact = 0
 $editor_mode = true
-$enhanced_mode = true
-$visual_block_start = nil
-$dir_position = {}
 MSCROLL = 10
 $patt=nil
-$ignorecase = true
 $quitting = false
 $modified = $writing = false
 ## dir stack for popping
-$visited_dirs = []
 ## dirs where some work has been done, for saving and restoring
 $used_dirs = []
 $viewctr = 0
 $history = []
 $sta = $cursor = 0
 $visual_mode = false
-$options = {}
-
-$options[:headers] = "on"
 
 $help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}Q#{BOLD_OFF} Quit "
 
@@ -146,7 +143,7 @@ def run()
 
   while true
     i = 0
-    system("clear")
+    #system("clear")
     # title
     filename = $g_data[:filename]
     db = $g_data[:db]
@@ -164,25 +161,59 @@ def run()
     next
   end
   puts "bye"
+  $writing = true
   config_write if $writing
 end
+def config_write
+  $g_data[:db] = nil
+  $g_data[:tables] = nil
+  writeYML $g_data, CONFIG_FILE
+end
+def config_read
+  if File.exist? CONFIG_FILE
+    $g_data = loadYML(CONFIG_FILE)
+  else
+    $g_data = {}
+  end
+end
+
+def loadYML( filename)
+  hash = YAML::load( File.open( filename ) )
+  #puts hash.keys.size
+  return hash
+end
+
+require 'fileutils' # for mkdir_p
+def writeYML obj, filename
+  dir = File.dirname filename
+  unless File.exist? dir
+    FileUtils::mkdir_p dir
+  end
+  File.open(filename, 'w') {|f| f.write obj.to_yaml }
+  #$stderr.puts color("==> written to #{filename}", "green", "bold") unless $opt_quiet
+  $stderr.puts("==> written to #{filename}") unless $opt_quiet
+end
+
 
 def db_menu
   h = {
-    :d => :change_database,
+    "1".to_sym => :select_table,
     :s => :save_sql,
-    :t => :select_table,
+    :h => :history_menu,  # databases accessed, tables accessed, sqls issued
     :m => :multi_select_table,
     :l => :list_tables,
+    :e => :edit_last_sql,
     :o => :output_to,
+    :d => :change_database,
     :q => :quit
   }
-  menu "DB Menu", h
+  menu "DB Menu for #{current_dbname}", h
 end
 
 
 # MENU MAIN 
 def main_menu
+  raise 
   # TODO
   h = { 
     :a => :ack,
@@ -205,6 +236,7 @@ def main_menu
   menu "Main Menu", h
 end
 def change_database filename=nil
+  # add to g_data as visited_dbs
   filename = select_database_name unless filename
   if filename
     db = Database.new filename
@@ -212,6 +244,10 @@ def change_database filename=nil
     $g_data[:filename] = filename
     $g_data[:db] = db
     $g_data[:tables] = tables
+    $g_data[:visited_dbs] ||= []
+    # TODO should be unique. remove if exists, then add
+    $g_data[:visited_dbs] << filename
+    list_tables
   end
   return filename, db, tables
 end
@@ -230,6 +266,8 @@ def multi_select_table
   sql = "SELECT #{sel_columns.join(",")} FROM #{sel_tables.join(',')} ;"
   puts sql
   perror "hit a key"
+  # TODO edit it and view result
+  # TODO join based on commond fields, we have that code somewhere
 
 end
 
@@ -242,6 +280,7 @@ def select_table
       $quitting = true
       return false
     end
+    return
   end
   columns = db.columns tablename
   sel_columns = multi_select "select column from #{tablename}", columns
@@ -258,10 +297,75 @@ def select_table
     $quitting = true
     return false
   end
-  view_data db, command
+  view_data db, command, $options[:output_to]
+  set_last_sql command
   return true
+end
+def list_tables
+  db = current_db()
+  tables = current_db.tables
+  data = [["Table", "Rows"]]
+  tables.each do |t|
+    #columns, datatypes = db.get_metadata t
+    content = db.get_data "SELECT count(1) from #{t} "
+    rows = content.first.first
+    row = [t, rows]
+    data << row
+    #puts "#{t}  #{rows} "
+  end
+  view_array data
+end
+
+# send output of following commands to this file
+def output_to filename=nil
+  unless filename
+    filename = input "Enter output filename: "
+    filename = filename.chomp
+  end
+  filename = nil if filename == ""
+  $options[:output_to] = filename
+  return filename
+end
+def current_db
+  $g_data[:db]
+end
+def current_dbname
+  $g_data[:filename]
+end
+def save_sql sql=nil
+  sql ||= $g_data[:last_sql] 
+  $g_data[:databases] ||= {}
+  $g_data[:databases][current_dbname()] ||= {}
+  $g_data[:databases][current_dbname()][:saved_sqls] ||= []
+  $g_data[:databases][current_dbname()][:saved_sqls] << sql
+end
+def set_last_sql sql
+  $g_data[:last_sql] = sql
+  # set history of sqls issued
+  $g_data[:databases] ||= {}
+  $g_data[:databases][current_dbname()] ||= {}
+  $g_data[:databases][current_dbname()][:history] ||= []
+  $g_data[:databases][current_dbname()][:history] << sql
+end
+def edit_last_sql
+  # this can be buggy, if you change database
+  sql =  $g_data[:last_sql]
+  command = vared sql, "Edit SQL:"
+  if command.size == 0
+    $quitting = true
+    return false
+  end
+  view_data current_db, command, $options[:output_to]
+  set_last_sql command
+end
+def view_array data
+  filename = tabulate data
+  puts "Got  #{filename} " if $opt_verbose
+  File.open(filename).readlines.each  {|line| puts line}
 end
 
 
+config_read
+$g_data ||= {}
 
 run 
