@@ -6,7 +6,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 14:33
 #      License: MIT
-#  Last update: 2017-03-19 12:39
+#  Last update: 2017-03-21 19:52
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 
@@ -33,6 +33,7 @@ def menu title, h
   h.each_pair { |k, v| puts " #{k}: #{v}" }
     print "\r >"
   ch = get_char
+  puts ch
   binding = h[ch]
   binding = h[ch.to_sym] unless binding
   if binding
