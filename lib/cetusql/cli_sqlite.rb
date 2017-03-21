@@ -5,11 +5,12 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-19 20:19
+#  Last update: 2017-03-21 20:21
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
 require 'sqlite3'
+require 'shellwords'
 
 # get database names
 def getdbname
@@ -60,22 +61,49 @@ def get_metadata table
 end
 # TODO option of headers
 # run query and put into a temp table and view it using vim
-def view_data db, sql
-  data = []
+# If no outputfile name passed, then use temp table
+# What about STDOUT
+# TODO use temp file, format it there and append to given file only after termtable
+def view_data db, sql, outputfile=nil
   str = db.get_data sql
+  #puts "SQL: #{sql}.\nstr: #{str.size}"
+  data = []
   str.each {|line| data << line.join("\t");  }
-  filename = "t.t"
+  #puts "Rows: #{data.size}"
   require 'tempfile'
   tmpfile = Tempfile.new('SQL.XXXXXX')
   filename = tmpfile.path
-  #File.open(filename, 'w') {|f| f.write(data.join("\n")) }
+  filename = Shellwords.escape(filename)
+  #puts "Writing to #{filename}"
   tmpfile.write(data.join("\n"))
-  
+  tmpfile.close # need to flush, otherwise write is buffered
   system("cat #{filename} | term-table.rb -H | sponge #{filename}")
+  if outputfile
+    puts "comes here"
+    system("cp #{filename} #{outputfile}")
+    filename = outputfile
+  end
+  system "wc -l #{filename}"
+  
   #system "$EDITOR #{filename}"
   system "vim -c ':set nowrap' #{filename}"
   tmpfile.close
   tmpfile.unlink
+end
+# given content returned by get_data, formats and returns in a file
+def tabulate content
+  data = []
+  content.each {|line| data << line.join("\t");  }
+  puts "Rows: #{data.size}" if $opt_verbose
+  require 'tempfile'
+  tmpfile = Tempfile.new('SQL.XXXXXX')
+  filename = tmpfile.path
+  #filename = Shellwords.escape(filename)
+  #puts "Writing to #{filename}"
+  tmpfile.write(data.join("\n"))
+  tmpfile.close # need to flush, otherwise write is buffered
+  system("term-table.rb < #{filename} | sponge #{filename}")
+  return filename
 end
 class Database
 
@@ -111,6 +139,7 @@ class Database
     datatypes = content[0].types 
     return columns, datatypes
   end
+  # runs sql query and returns an array of arrays
   def get_data sql
     #$log.debug "SQL: #{sql} "
     columns, *rows = @db.execute2(sql)
