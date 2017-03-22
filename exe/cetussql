@@ -5,7 +5,7 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-22 20:34
+#  Last update: 2017-03-22 23:26
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
@@ -45,6 +45,7 @@ CONFIG_FILE=File.expand_path("~/.cetusqlinfo")
 $options = {}
 $options[:headers] = "on"
 $options[:output_to] = nil
+$options[:formatting] = true
 
 $bindings = {}
 $bindings = {
@@ -206,6 +207,7 @@ def db_menu
     :l => :list_tables,
     :e => :edit_last_sql,
     :o => :output_to,
+    :F => :formatting_toggle,
     :d => :change_database,
     :q => :quit
   }
@@ -397,24 +399,29 @@ def sql_history
   hist = dbc[:history]
   saved = dbc[:saved_sqls]
   ctr = 1
+  all = []
   if saved
     pbold "Saved sqls"
     saved.each_with_index {|e,i| puts "#{ctr} #{e}"; ctr += 1; }
+    all += saved
   end
   if hist
     pbold "History"
     hist.each_with_index {|e,i| puts "#{ctr} #{e}"; ctr += 1; }
+    all += hist
   end
   print "Select an sql: "
   choice = $stdin.gets.chomp
-  all = saved + hist
-  sql = all[choice.to_i]
+  puts choice
+  return if choice == ""
+  sql = all[choice.to_i - 1]
+  return unless sql
   vared sql, "Edit sql: "
   puts sql
   view_sql sql
 end
 def view_sql sql
-  view_data current_db, sql, $options[:output_to]
+  view_data current_db, sql, $options
 end
 
 
@@ -427,6 +434,9 @@ def output_to filename=nil
   filename = nil if filename == ""
   $options[:output_to] = filename
   return filename
+end
+def formatting_toggle
+  $options[:formatting] = !$options[:formatting]
 end
 def current_db
   $g_data[:db]
