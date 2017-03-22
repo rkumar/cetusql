@@ -5,7 +5,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-22 19:39
+#  Last update: 2017-03-22 23:24
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
@@ -50,7 +50,9 @@ end
 # If no outputfile name passed, then use temp table
 # What about STDOUT
 # TODO use temp file, format it there and append to given file only after termtable
-def view_data db, sql, outputfile=nil
+def view_data db, sql, options
+  outputfile = options[:output_to]
+  formatting = options[:formatting]
   str = db.get_data sql
   #puts "SQL: #{sql}.\nstr: #{str.size}"
   data = []
@@ -63,7 +65,10 @@ def view_data db, sql, outputfile=nil
   #puts "Writing to #{filename}"
   tmpfile.write(data.join("\n"))
   tmpfile.close # need to flush, otherwise write is buffered
-  system("cat #{filename} | term-table.rb -H | sponge #{filename}")
+  if formatting
+    # sometimes this can be slow, and it can fault on UTF-8 chars
+    system("cat #{filename} | term-table.rb -H | sponge #{filename}")
+  end
   if outputfile
     puts "comes here"
     system("cp #{filename} #{outputfile}")
