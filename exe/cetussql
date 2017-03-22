@@ -5,10 +5,11 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-21 20:21
+#  Last update: 2017-03-22 12:40
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
+#  - use fill path of db, since many with same name
 #
 #  Earlier, db routines used global vars. We need to be able to switch between databases
 #   and switch back. So state and history should be maintained across database files.
@@ -209,7 +210,34 @@ def db_menu
   }
   menu "DB Menu for #{current_dbname}", h
 end
+def table_menu
+  h = {
+    "1".to_sym => :select_columns,
+    "2".to_sym => :view_all,
+    "3".to_sym => :view_sample,
+    "0".to_sym => :make_query,
+    :s => :save_sql,
+    :x => :execute_query, # DDL no result
+    :h => :history_menu,  # queries for this table
+    :c => :view_schema,
+    :e => :edit_last_sql,
+    :o => :output_to,
+    :d => :change_database,
+    :q => :quit
+  }
+  menu "Table Menu for #{current_tablename}", h
+end
 
+# TODO
+def make_query tablename=nil
+  # 1. select table if nil
+  # 2 select columns for display
+  # 3. select order
+  # 4. select where
+  # 5. select LIMIT
+  # 6. edit and run
+
+end
 
 # MENU MAIN 
 def main_menu
@@ -248,6 +276,7 @@ def change_database filename=nil
     # TODO should be unique. remove if exists, then add
     $g_data[:visited_dbs] << filename
     list_tables
+    list_indexes
   end
   return filename, db, tables
 end
@@ -271,6 +300,7 @@ def multi_select_table
 
 end
 
+# select a table and then immediately its columns
 def select_table
   db = $g_data[:db]
   filename = $g_data[:filename]
@@ -282,6 +312,7 @@ def select_table
     end
     return
   end
+  $g_data[:current_tablename] = tablename
   columns = db.columns tablename
   sel_columns = multi_select "select column from #{tablename}", columns
   #puts sel_columns.size
@@ -304,16 +335,40 @@ end
 def list_tables
   db = current_db()
   tables = current_db.tables
-  data = [["Table", "Rows"]]
+  data = [["Table", "Rows", "Indexed"]]
   tables.each do |t|
     #columns, datatypes = db.get_metadata t
     content = db.get_data "SELECT count(1) from #{t} "
     rows = content.first.first
-    row = [t, rows]
+    indexed = db.indexed_columns(t) || "---"
+    row = [t, rows, indexed]
     data << row
     #puts "#{t}  #{rows} "
   end
   view_array data
+end
+# I don't need to loop through tables SILLY !
+def list_indexes
+  db = current_db()
+  tables = current_db.tables
+  data = [["Index", "Table", "Column/s"]]
+  tables.each do |t|
+    #columns, datatypes = db.get_metadata t
+    sql = %Q{SELECT name, tbl_name, sql FROM sqlite_master WHERE type = "index" and tbl_name =  "#{t}" }
+    content = db.get_data sql
+    content.each do |r|
+      if r[-1] != nil
+        m = r[-1].match /\((.*)\)/
+          r[-1] = m[1] if m
+      end
+      row = [ *r ]
+      data << row
+    end
+  end
+  view_array data
+end
+def indexes_for_table tbl
+  db = current_db()
 end
 
 # send output of following commands to this file
@@ -331,6 +386,9 @@ def current_db
 end
 def current_dbname
   $g_data[:filename]
+end
+def current_tablename
+  $g_data[:tablename]
 end
 def save_sql sql=nil
   sql ||= $g_data[:last_sql] 
