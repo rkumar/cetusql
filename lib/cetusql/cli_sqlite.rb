@@ -5,16 +5,17 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-21 20:21
+#  Last update: 2017-03-22 12:39
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
 require 'sqlite3'
 require 'shellwords'
+require 'pp'
 
 # get database names
 def getdbname
-  choices = Dir['*.db','*.sqlite']
+  choices = Dir['*.db','*.sqlite','*.sqlite3']
   if choices
     if choices.size == 1
       return choices.first
@@ -129,6 +130,21 @@ class Database
     raise ArgumentError, "#{$0}: table name cannot be nil" unless table
     columns, ignore = self.get_metadata table
     return columns
+  end
+  def indexed_columns table
+    indexes = sql %Q{select sql from sqlite_master where type='index' and tbl_name = "#{table}" }
+    return nil if indexes == []
+    #pp indexes
+    arr = []
+    indexes.each do |ind|
+      if ind.first.nil?
+        arr << "auto?"
+        next
+      end
+      m = ind.first.match /\((.*)\)/
+      arr << m[1] if m
+    end
+    return arr.join(",")
   end
   def get_metadata table
     raise ArgumentError, "#{$0}: table name cannot be nil" unless table
