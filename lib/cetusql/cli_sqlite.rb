@@ -5,7 +5,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-22 12:39
+#  Last update: 2017-03-22 19:39
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
@@ -13,21 +13,6 @@ require 'sqlite3'
 require 'shellwords'
 require 'pp'
 
-# get database names
-def getdbname
-  choices = Dir['*.db','*.sqlite','*.sqlite3']
-  if choices
-    if choices.size == 1
-      return choices.first
-    else
-      # select_from is in cli_utils.rb
-      db = select_from "Select database", choices
-      return db
-    end
-  end 
-  return nil
-end
-alias :select_database_name :getdbname
 def get_table_names db
   #raise "No database file selected." unless $current_db
 
