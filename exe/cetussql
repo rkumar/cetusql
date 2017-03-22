@@ -5,11 +5,12 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-22 12:40
+#  Last update: 2017-03-22 19:48
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
 #  - use fill path of db, since many with same name
+#  - when selecting dbs at start one can show recent databases too if config file can be read
 #
 #  Earlier, db routines used global vars. We need to be able to switch between databases
 #   and switch back. So state and history should be maintained across database files.
@@ -36,7 +37,7 @@ require 'cetusql/cli_sqlite'
 # copy into PATH
 # alias c=~/bin/cetusql
 # c
-VERSION="0.0.0"
+VERSION="0.0.1"
 O_CONFIG=true
 CONFIG_FILE=File.expand_path("~/.cetusqlinfo")
 # Using this to store data that has to be used in actions which do not take parameters or return values
@@ -274,12 +275,29 @@ def change_database filename=nil
     $g_data[:tables] = tables
     $g_data[:visited_dbs] ||= []
     # TODO should be unique. remove if exists, then add
+    $g_data[:visited_dbs].delete(filename)
     $g_data[:visited_dbs] << filename
     list_tables
     list_indexes
   end
   return filename, db, tables
 end
+# get database names
+def getdbname
+  # what about recent ones TODO
+  choices = Dir['*.db','*.sqlite','*.sqlite3'] | $g_data[:visited_dbs]
+  if choices
+    if choices.size == 1
+      return File.expand_path(choices.first)
+    else
+      # select_from is in cli_utils.rb
+      db = select_from "Select database", choices
+      return File.expand_path(db) if db
+    end
+  end 
+  return nil
+end
+alias :select_database_name :getdbname
 def multi_select_table
   db = $g_data[:db]
   sel_tables = multi_select "select tables ", $g_data[:db].tables
