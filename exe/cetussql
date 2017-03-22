@@ -5,17 +5,17 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-22 19:48
+#  Last update: 2017-03-22 20:34
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
-#  - use fill path of db, since many with same name
-#  - when selecting dbs at start one can show recent databases too if config file can be read
+#  + use fill path of db, since many with same name
+#  + when selecting dbs at start one can show recent databases too if config file can be read
 #
 #  Earlier, db routines used global vars. We need to be able to switch between databases
 #   and switch back. So state and history should be maintained across database files.
 #
-#   options : unformatted with tabs output
+#   options : unformatted with tabs output - huge outputs take time
 #      STDOUT or file. specify output to a file
 #      header off and on
 #
@@ -201,7 +201,7 @@ def db_menu
   h = {
     "1".to_sym => :select_table,
     :s => :save_sql,
-    :h => :history_menu,  # databases accessed, tables accessed, sqls issued
+    :h => :sql_history,  # databases accessed, tables accessed, sqls issued
     :m => :multi_select_table,
     :l => :list_tables,
     :e => :edit_last_sql,
@@ -346,7 +346,7 @@ def select_table
     $quitting = true
     return false
   end
-  view_data db, command, $options[:output_to]
+  view_sql command
   set_last_sql command
   return true
 end
@@ -386,8 +386,37 @@ def list_indexes
   view_array data
 end
 def indexes_for_table tbl
+  raise
   db = current_db()
 end
+def config
+  $g_data[:databases][current_dbname()]
+end
+def sql_history
+  dbc = config()
+  hist = dbc[:history]
+  saved = dbc[:saved_sqls]
+  ctr = 1
+  if saved
+    pbold "Saved sqls"
+    saved.each_with_index {|e,i| puts "#{ctr} #{e}"; ctr += 1; }
+  end
+  if hist
+    pbold "History"
+    hist.each_with_index {|e,i| puts "#{ctr} #{e}"; ctr += 1; }
+  end
+  print "Select an sql: "
+  choice = $stdin.gets.chomp
+  all = saved + hist
+  sql = all[choice.to_i]
+  vared sql, "Edit sql: "
+  puts sql
+  view_sql sql
+end
+def view_sql sql
+  view_data current_db, sql, $options[:output_to]
+end
+
 
 # send output of following commands to this file
 def output_to filename=nil
@@ -431,7 +460,7 @@ def edit_last_sql
     $quitting = true
     return false
   end
-  view_data current_db, command, $options[:output_to]
+  view_sql command
   set_last_sql command
 end
 def view_array data
