@@ -5,11 +5,12 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-24 14:25
+#  Last update: 2017-03-24 16:39
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
 #   last_sql must be for current database not just any. save under this database and retrieve under this database
+#   - up arrow on table menu should call edit_last_sql
 #
 #  Earlier, db routines used global vars. We need to be able to switch between databases
 #   and switch back. So state and history should be maintained across database files.
@@ -228,6 +229,7 @@ def table_menu tablename=nil
   h = {
     "2".to_sym => :view_all_rows,
     "3".to_sym => :view_sample,
+    "9".to_sym => :view_recent,
     "4".to_sym => :select_columns,
     "5".to_sym => :select_orderby,
     "6".to_sym => :select_where,
@@ -586,18 +588,21 @@ def save_sql sql=nil
   $g_data[:databases][current_dbname()] ||= {}
   $g_data[:databases][current_dbname()][:saved_sqls] ||= []
   $g_data[:databases][current_dbname()][:saved_sqls] << sql
+  $g_data[:databases][current_dbname()][:last_sql] = sql
 end
 def set_last_sql sql
   $g_data[:last_sql] = sql
   # set history of sqls issued
   $g_data[:databases] ||= {}
   $g_data[:databases][current_dbname()] ||= {}
+  $g_data[:databases][current_dbname()][:last_sql] = sql
   $g_data[:databases][current_dbname()][:history] ||= []
   $g_data[:databases][current_dbname()][:history] << sql
 end
 def edit_last_sql
   # this can be buggy, if you change database
-  sql =  $g_data[:last_sql]
+  #sql =  $g_data[:last_sql]
+  sql = $g_data[:databases][current_dbname()][:last_sql]
   command = vared sql, "Edit SQL:"
   if command.nil? or command.size == 0
     $quitting = true
@@ -622,6 +627,11 @@ def view_sample
   table = current_tablename()
   #set_last_sql sql
   sql = "SELECT * from #{table} LIMIT 100"
+  view_sql sql
+end
+def view_recent
+  table = current_tablename()
+  sql = current_db().sql_recent_rows(table)
   view_sql sql
 end
 
