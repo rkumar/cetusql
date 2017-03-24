@@ -5,7 +5,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-22 23:24
+#  Last update: 2017-03-23 20:58
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
@@ -70,11 +70,11 @@ def view_data db, sql, options
     system("cat #{filename} | term-table.rb -H | sponge #{filename}")
   end
   if outputfile
-    puts "comes here"
+    #puts "comes here"
     system("cp #{filename} #{outputfile}")
     filename = outputfile
   end
-  system "wc -l #{filename}"
+  system "wc -l #{filename}" if $opt_debug
   
   #system "$EDITOR #{filename}"
   system "vim -c ':set nowrap' #{filename}"
@@ -82,7 +82,7 @@ def view_data db, sql, options
   tmpfile.unlink
 end
 # given content returned by get_data, formats and returns in a file
-def tabulate content
+def tabulate content, options
   data = []
   content.each {|line| data << line.join("\t");  }
   puts "Rows: #{data.size}" if $opt_verbose
@@ -93,7 +93,9 @@ def tabulate content
   #puts "Writing to #{filename}"
   tmpfile.write(data.join("\n"))
   tmpfile.close # need to flush, otherwise write is buffered
-  system("term-table.rb < #{filename} | sponge #{filename}")
+  if options[:formatting]
+    system("term-table.rb < #{filename} | sponge #{filename}")
+  end
   return filename
 end
 class Database
@@ -112,7 +114,7 @@ class Database
   end
   def tables
     return @tables if @tables
-    tables = sql "select name from sqlite_master where type='table'"
+    tables = sql "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
     tables.collect!{|x| x[0] }  ## 1.9 hack, but will it run on 1.8 ??
     @tables = tables
   end
