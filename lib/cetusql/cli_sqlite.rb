@@ -5,7 +5,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-23 20:58
+#  Last update: 2017-03-24 16:39
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
@@ -163,6 +163,9 @@ class Database
     datatypes = content[0].types 
     rs = ResultSet.new(contents, columns, datatypes)
     return rs
+  end
+  def sql_recent_rows tablename
+    sql =  "SELECT * from #{tablename} ORDER by rowid DESC LIMIT 100"
   end
   def close
     @db = nil
