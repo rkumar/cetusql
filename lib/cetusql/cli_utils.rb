@@ -6,7 +6,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 14:33
 #      License: MIT
-#  Last update: 2017-03-21 19:52
+#  Last update: 2017-03-24 14:00
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 
@@ -19,21 +19,40 @@ def vared var, prompt=">"
     # Remove the hook right away.
     Readline.pre_input_hook = nil
   end
+  begin 
   input = Readline.readline(prompt, false)
+  rescue Exception => e
+    return nil
+  end
+  input
 end
 
 
 # What if we only want to allow the given keys and ignore others.
 # In menu maybe ENTER and other such keys should be ignored, or atleast
 # option should be there, so i don't accidentally hit enter.
+# print in columns, but take into account size so we don't exceed COLS
+# (Some entries like paths can be long)
 def menu title, h
   return unless h
 
   pbold "#{title}"
-  h.each_pair { |k, v| puts " #{k}: #{v}" }
-    print "\r >"
+  ctr = 0
+  #h.each_pair { |k, v| puts " #{k}: #{v}" }
+  h.each_pair { |k, v| 
+    print " #{k}: %-20s" % [v]
+    if ctr > 1
+      print "\n"
+      ctr = 0
+    else
+      ctr += 1
+    end
+  }
+    print "\n >"
+    #print "\r >"
   ch = get_char
   puts ch
+  #system("clear") # ???
   binding = h[ch]
   binding = h[ch.to_sym] unless binding
   if binding
@@ -243,7 +262,8 @@ BLUE       = "\e[1;34m"
 ON_BLUE    = "\e[44m"
 REVERSE    = "\e[7m"
 UNDERLINE    = "\e[4m"
-CURSOR_COLOR = ON_BLUE
+#CURSOR_COLOR = ON_BLUE
+CURSOR_COLOR = CLEAR
 
 # --- end constants
 ## check screen size and accordingly adjust some variables
@@ -268,3 +288,88 @@ def agree(prompt="")
   false
 end
 alias :confirm :agree
+## 
+#
+# print in columns
+# ary - array of data
+# sz  - lines in one column
+#
+def columnate ary, sz
+  buff=Array.new
+  return buff if ary.nil? || ary.size == 0
+  
+  # determine width based on number of files to show
+  # if less than sz then 1 col and full width
+  #
+  wid = 30
+  ars = ary.size
+  ars = [$pagesize, ary.size].min
+  d = 0
+  if ars <= sz
+    wid = $gcols - d
+  else
+    tmp = (ars * 1.000/ sz).ceil
+    wid = $gcols / tmp - d
+  end
+  #elsif ars < sz * 2
+    #wid = $gcols/2 - d
+  #elsif ars < sz * 3
+    #wid = $gcols/3 - d
+  #else
+    #wid = $gcols/$gviscols - d
+  #end
+
+  # ix refers to the index in the complete file list, wherease we only show 60 at a time
+  ix=0
+  while true
+    ## ctr refers to the index in the column
+    ctr=0
+    while ctr < sz
+
+      f = ary[ix]
+      fsz = f.size
+      if fsz > wid
+        f = f[0, wid-2]+"$ "
+        ## we do the coloring after trunc so ANSI escpe seq does not get get
+        if ix + $sta == $cursor
+          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+        end
+      else
+        ## we do the coloring before padding so the entire line does not get padded, only file name
+        if ix + $sta == $cursor
+          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+        end
+        #f = f.ljust(wid)
+        f << " " * (wid-fsz)
+      end
+
+      if buff[ctr]
+        buff[ctr] += f
+      else
+        buff[ctr] = f
+      end
+
+      ctr+=1
+      ix+=1
+      break if ix >= ary.size
+    end
+    break if ix >= ary.size
+  end
+  return buff
+end
+# print an array in columns
+# default number of columns is 3 and can be supplied. I actually much prefer that this be derived, so we can get more 
+    # columns if possible, and te width should be caclulated too
+def print_in_cols a, noc=3
+  x = noc - 1
+  cols = a.each_slice((a.size+x)/noc).to_a
+  # todo width should be determined based on COLS of screen, and width of data
+  cols.first.zip( *cols[1..-1] ).each{|row| puts row.map{|e| e ? '%-30s' % e : 'XXXXX'}.join("  ") }
+end
+## expects array of arrays
+#class Array
+  #def to_table l = []
+    #self.each{|r|r.each_with_index{|f,i|l[i] = [l[i]||0, f.length].max}}
+    #self.each{|r|r.each_with_index{|f,i|print "#{f.ljust l[i]}|"};puts ""}
+  #end
+#end
