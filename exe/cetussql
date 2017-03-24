@@ -5,12 +5,11 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-22 23:26
+#  Last update: 2017-03-24 14:25
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
-#  + use fill path of db, since many with same name
-#  + when selecting dbs at start one can show recent databases too if config file can be read
+#   last_sql must be for current database not just any. save under this database and retrieve under this database
 #
 #  Earlier, db routines used global vars. We need to be able to switch between databases
 #   and switch back. So state and history should be maintained across database files.
@@ -159,6 +158,17 @@ def run()
     # ZZZ XXX
     #print "\r#{_mm}#{$patt} >"
     ch, text = db_menu
+    # TODO all this should not be here
+    chi = ch.to_i
+    if chi > 0 and chi < 10
+      tables = fetch(:tables)
+      tablename = tables[chi - 1]
+      if tablename
+        #puts "selected   #{tables[chi]}  "
+        select_table(tablename)
+      end
+    end
+    # TODO if number is < 10 then see if there's a table and select that table
     #puts
     break if ch == "q" or ch == "ESCAPE" or ch == "C-c"
     next
@@ -200,35 +210,39 @@ end
 
 def db_menu
   h = {
-    "1".to_sym => :select_table,
+    :t => :select_table,
     :s => :save_sql,
     :h => :sql_history,  # databases accessed, tables accessed, sqls issued
     :m => :multi_select_table,
     :l => :list_tables,
     :e => :edit_last_sql,
-    :o => :output_to,
+    :O => :output_to,
     :F => :formatting_toggle,
     :d => :change_database,
     :q => :quit
   }
   menu "DB Menu for #{current_dbname}", h
 end
-def table_menu
+def table_menu tablename=nil
+  t = tablename || current_tablename()
   h = {
-    "1".to_sym => :select_columns,
-    "2".to_sym => :view_all,
+    "2".to_sym => :view_all_rows,
     "3".to_sym => :view_sample,
+    "4".to_sym => :select_columns,
+    "5".to_sym => :select_orderby,
+    "6".to_sym => :select_where,
+    "R".to_sym => :run_query,
     "0".to_sym => :make_query,
     :s => :save_sql,
-    :x => :execute_query, # DDL no result
+    :x => :new_query, # DDL no result enter a query and execute
     :h => :history_menu,  # queries for this table
     :c => :view_schema,
     :e => :edit_last_sql,
-    :o => :output_to,
+    :O => :output_to,
     :d => :change_database,
     :q => :quit
   }
-  menu "Table Menu for #{current_tablename}", h
+  menu "Table Menu for #{t}", h
 end
 
 # TODO
@@ -293,7 +307,8 @@ def getdbname
       return File.expand_path(choices.first)
     else
       # select_from is in cli_utils.rb
-      db = select_from "Select database", choices
+      #db = select_from "Select database", choices
+      db = ctrlp choices
       return File.expand_path(db) if db
     end
   end 
@@ -321,10 +336,12 @@ def multi_select_table
 end
 
 # select a table and then immediately its columns
-def select_table
+def select_table tablename=nil
   db = $g_data[:db]
   filename = $g_data[:filename]
-  tablename = select_from "Select table (#{filename})", db.tables
+  unless tablename
+    tablename = select_from "Select table (#{filename})", db.tables
+  end
   unless tablename
     if confirm("Do you wish to quit ? ")
       $quitting = true
@@ -333,18 +350,46 @@ def select_table
     return
   end
   $g_data[:current_tablename] = tablename
+  list_metadata tablename
+  indexes_for_table tablename
+  ch = nil
+  while ch != 'q'
+    ch, text = table_menu tablename
+  end
+  #pause
+  return true
+end
+def store key, value
+  $g_data[key] = value
+end
+def fetch key
+  $g_data[key]
+end
+def select_columns
+  puts "inside select_columns"
+  db = current_db()
+  tablename = current_tablename || puts("No table!!")
   columns = db.columns tablename
+  # TODO
+  # display columns with datatypes and indexes on them
+  # count of rows
+  # options for sample, first 100 rows last 100 rows (based on count)
+  # option for selecting column, where, order, RUN, all_cols,
   sel_columns = multi_select "select column from #{tablename}", columns
   #puts sel_columns.size
   #puts sel_columns.class
-  sel_columns ||= ['*']
+  #p sel_columns
+  sel_columns = ['*'] if sel_columns.size == 0
+  store ':selected_columns', sel_columns
+  puts fetch(':selected_columns')
+  return true
   sql = "SELECT #{sel_columns.join(",")} FROM #{tablename} ;"
   #puts sql
 
   #Readline::HISTORY.push(sql) 
   #command = Readline::readline('>', true)
   command = vared sql, "Edit SQL:"
-  if command.size == 0
+  if command.nil? or command.size == 0
     $quitting = true
     return false
   end
@@ -352,44 +397,122 @@ def select_table
   set_last_sql command
   return true
 end
+def select_orderby
+  db = current_db()
+  tablename = current_tablename || exit
+  columns = db.columns tablename
+  sel_columns = multi_select "select order by from #{tablename}", columns
+  sel_columns = nil if sel_columns.size == 0
+  store ':order_by', sel_columns
+  puts fetch(':order_by')
+  return true
+end
+def select_where
+  db = current_db()
+  tablename = current_tablename || exit
+  columns = db.columns tablename
+  sel_columns = multi_select "select WHERE from #{tablename}", columns
+  sel_columns = nil if sel_columns.size == 0
+  a = []
+  sel_columns.each do |e|
+    s = input "WHERE #{e} "
+    a << "#{e} #{s}"
+  end
+  store ':where', a.join(" AND ")
+  puts fetch(':where')
+  return true
+end
+def run_query
+  t =  current_tablename
+  c =  fetch(':selected_columns') || ['*']
+  o =  fetch(':order_by') 
+  w =  fetch(':where') 
+  sql = "SELECT #{c.join(', ')} FROM #{t} "
+  if w
+    #sql += " WHERE #{w.join(', ')} "
+    sql += " WHERE #{w} "
+  end
+  if o
+    sql += " ORDER BY #{o.join(', ')} "
+  end
+  sql = vared sql, "Edit SQL: "
+  return if sql.nil? or sql.size == 0
+  set_last_sql sql
+  view_sql sql
+end
 def list_tables
   db = current_db()
   tables = current_db.tables
-  data = [["Table", "Rows", "Indexed"]]
+  data = [["#", "Table", "Rows", "Indexed"]]
+  ctr = 1
   tables.each do |t|
     #columns, datatypes = db.get_metadata t
     content = db.get_data "SELECT count(1) from #{t} "
     rows = content.first.first
-    indexed = db.indexed_columns(t) || "---"
-    row = [t, rows, indexed]
+    indexed = '?'
+    if $options[:index_info]
+      indexed = db.indexed_columns(t) || "---"
+    end
+    char = ctr < 10 ? ctr.to_s : ""
+    row = [char, t, rows, indexed]
     data << row
+    ctr += 1
     #puts "#{t}  #{rows} "
   end
   view_array data
 end
 # I don't need to loop through tables SILLY !
+# FIXME just loop without tables
 def list_indexes
   db = current_db()
-  tables = current_db.tables
   data = [["Index", "Table", "Column/s"]]
-  tables.each do |t|
-    #columns, datatypes = db.get_metadata t
-    sql = %Q{SELECT name, tbl_name, sql FROM sqlite_master WHERE type = "index" and tbl_name =  "#{t}" }
-    content = db.get_data sql
-    content.each do |r|
-      if r[-1] != nil
-        m = r[-1].match /\((.*)\)/
-          r[-1] = m[1] if m
-      end
-      row = [ *r ]
-      data << row
+  #columns, datatypes = db.get_metadata t
+  sql = %Q{SELECT name, tbl_name, sql FROM sqlite_master WHERE type = "index" ORDER BY tbl_name }
+  content = db.get_data sql
+  return if content.nil? or content == []
+  content.each do |r|
+    if r[-1] != nil
+      m = r[-1].match /\((.*)\)/
+        r[-1] = m[1] if m
     end
+    row = [ *r ]
+    data << row
   end
   view_array data
 end
-def indexes_for_table tbl
-  raise
+def indexes_for_table t
   db = current_db()
+  data = [["Index", "Table", "Column/s"]]
+  sql = %Q{SELECT name, tbl_name, sql FROM sqlite_master WHERE type = "index" and tbl_name =  "#{t}" }
+  content = db.get_data sql
+  return if content.nil? or content == []
+  content.each do |r|
+    if r[-1] != nil
+      m = r[-1].match /\((.*)\)/
+        r[-1] = m[1] if m
+    end
+    row = [ *r ]
+    data << row
+  end
+  view_array data
+end
+# if too long split and columnate at 10 rows
+def list_metadata table
+  db = current_db()
+  columns, datatypes = db.get_metadata table
+  array = []
+  pbold "Table: #{table}"
+    columns.each_with_index do |e, ix|
+    #print "%-20s %s\n" % [e, datatypes[ix] ]
+    array << "%-20s %s " % [e, datatypes[ix] ]
+  end
+  if false
+  array = columnate array, $grows - 7
+  array.each {|line| print line, "\n"  }
+  end
+  print_in_cols array, 3
+  #array.to_table
+
 end
 def config
   $g_data[:databases][current_dbname()]
@@ -416,12 +539,20 @@ def sql_history
   return if choice == ""
   sql = all[choice.to_i - 1]
   return unless sql
-  vared sql, "Edit sql: "
+  sql = vared sql, "Edit sql: "
+  return if sql.nil? or sql.size == 0
   puts sql
   view_sql sql
 end
 def view_sql sql
-  view_data current_db, sql, $options
+  begin
+    view_data current_db, sql, $options
+  rescue => e  
+    puts e.to_s
+    puts e.message  
+    #puts e.backtrace.join("\n")
+  end  
+
 end
 
 
@@ -437,6 +568,8 @@ def output_to filename=nil
 end
 def formatting_toggle
   $options[:formatting] = !$options[:formatting]
+  puts "Formatting is now #{$options[:formatting]}  "
+  pause
 end
 def current_db
   $g_data[:db]
@@ -445,7 +578,7 @@ def current_dbname
   $g_data[:filename]
 end
 def current_tablename
-  $g_data[:tablename]
+  $g_data[:current_tablename]
 end
 def save_sql sql=nil
   sql ||= $g_data[:last_sql] 
@@ -466,7 +599,7 @@ def edit_last_sql
   # this can be buggy, if you change database
   sql =  $g_data[:last_sql]
   command = vared sql, "Edit SQL:"
-  if command.size == 0
+  if command.nil? or command.size == 0
     $quitting = true
     return false
   end
@@ -474,9 +607,22 @@ def edit_last_sql
   set_last_sql command
 end
 def view_array data
-  filename = tabulate data
+  filename = tabulate data, $options
   puts "Got  #{filename} " if $opt_verbose
   File.open(filename).readlines.each  {|line| puts line}
+end
+# display all rows of current table
+def view_all_rows
+  table = current_tablename()
+  #set_last_sql sql
+  sql = "SELECT * from #{table}"
+  view_sql sql
+end
+def view_sample
+  table = current_tablename()
+  #set_last_sql sql
+  sql = "SELECT * from #{table} LIMIT 100"
+  view_sql sql
 end
 
 
