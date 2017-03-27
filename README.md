@@ -2,6 +2,7 @@
 
 Command-line based sqlite3 database explorer. The idea is to minimize typing of basic queries/tablenames and column names by allowing for selection of the same.
 
+
 Some basic features:
 
 - Lists databases in current folder and allows menu for selection.
