@@ -5,7 +5,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-24 16:39
+#  Last update: 2017-03-26 12:40
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
@@ -53,9 +53,16 @@ end
 def view_data db, sql, options
   outputfile = options[:output_to]
   formatting = options[:formatting]
-  str = db.get_data sql
+  headers = options[:headers]
+  #str = db.get_data sql
+  rs = db.execute_query sql
+  str = rs.content
+  columns = rs.columns
   #puts "SQL: #{sql}.\nstr: #{str.size}"
   data = []
+  if headers
+    data << columns.join("\t")
+  end
   str.each {|line| data << line.join("\t");  }
   #puts "Rows: #{data.size}"
   require 'tempfile'
@@ -65,9 +72,11 @@ def view_data db, sql, options
   #puts "Writing to #{filename}"
   tmpfile.write(data.join("\n"))
   tmpfile.close # need to flush, otherwise write is buffered
+  headerstr=nil
   if formatting
+    headerstr = "-H" unless headers
     # sometimes this can be slow, and it can fault on UTF-8 chars
-    system("cat #{filename} | term-table.rb -H | sponge #{filename}")
+    system("cat #{filename} | term-table.rb #{headerstr} | sponge #{filename}")
   end
   if outputfile
     #puts "comes here"
@@ -161,7 +170,7 @@ class Database
     content = rows
     return nil if content.nil? or content[0].nil?
     datatypes = content[0].types 
-    rs = ResultSet.new(contents, columns, datatypes)
+    rs = ResultSet.new(content, columns, datatypes)
     return rs
   end
   def sql_recent_rows tablename
