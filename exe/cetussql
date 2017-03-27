@@ -5,15 +5,20 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-24 16:39
+#  Last update: 2017-03-27 09:33
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
+#  - view_schema
+#  - make_query
+#  - 
+#  - store history in another file, per database, not one file, getting too large.
+#  + order by is stored, so picked up against wrong database
+#  + if headers requested then we have to add them.
 #   last_sql must be for current database not just any. save under this database and retrieve under this database
 #   - up arrow on table menu should call edit_last_sql
-#
-#  Earlier, db routines used global vars. We need to be able to switch between databases
-#   and switch back. So state and history should be maintained across database files.
+#   ? don't redraw the menu. the loop is outside the menu. keep it inside menu() so that it is not redrawn
+#    but exits upon q. what if user does not want that ?
 #
 #   options : unformatted with tabs output - huge outputs take time
 #      STDOUT or file. specify output to a file
@@ -22,7 +27,7 @@
 #
 #  == END TODO
 require 'readline'
-require 'io/wait'
+require 'io/wait' # may not need this
 # http://www.ruby-doc.org/stdlib-1.9.3/libdoc/shellwords/rdoc/Shellwords.html
 require 'shellwords'
 require 'yaml'
@@ -33,17 +38,13 @@ require 'cetusql/cli_sqlite'
 # -- requires 1.9.3 or higher for io/wait
 # -- cannot do with Highline since we need a timeout on wait, not sure if HL can do that
 
-## INSTALLATION
-# copy into PATH
-# alias c=~/bin/cetusql
-# c
-VERSION="0.0.1"
+VERSION="0.0.2"
 O_CONFIG=true
 CONFIG_FILE=File.expand_path("~/.cetusqlinfo")
 # Using this to store data that has to be used in actions which do not take parameters or return values
 #  when called from a key
 $options = {}
-$options[:headers] = "on"
+$options[:headers] = true
 $options[:output_to] = nil
 $options[:formatting] = true
 
@@ -151,14 +152,15 @@ def run()
     filename = $g_data[:filename]
     db = $g_data[:db]
     print "#{GREEN}#{$help}  #{BLUE}cetusql #{VERSION}#{CLEAR}\n"
-    t = "#{$title}"
-    t = t[t.size-$gcols..-1] if t.size >= $gcols
+    #t = "#{$title}"
+    #t = t[t.size-$gcols..-1] if t.size >= $gcols
     #print "#{BOLD}#{t}#{CLEAR}\n"
     # another query , change table, save sql, change db, select multiple tables
     # schema, count, sample
     # ZZZ XXX
     #print "\r#{_mm}#{$patt} >"
     ch, text = db_menu
+    puts ch if $opt_debug
     # TODO all this should not be here
     chi = ch.to_i
     if chi > 0 and chi < 10
@@ -220,6 +222,7 @@ def db_menu
     :O => :output_to,
     :F => :formatting_toggle,
     :d => :change_database,
+    "UP" => :edit_last_sql,
     :q => :quit
   }
   menu "DB Menu for #{current_dbname}", h
@@ -234,14 +237,15 @@ def table_menu tablename=nil
     "5".to_sym => :select_orderby,
     "6".to_sym => :select_where,
     "R".to_sym => :run_query,
-    "0".to_sym => :make_query,
+    "0".to_sym => :make_query, # TODO
     :s => :save_sql,
     :x => :new_query, # DDL no result enter a query and execute
     :h => :history_menu,  # queries for this table
-    :c => :view_schema,
+    :c => :view_schema, # TODO
     :e => :edit_last_sql,
     :O => :output_to,
     :d => :change_database,
+    "UP" => :edit_last_sql,
     :q => :quit
   }
   menu "Table Menu for #{t}", h
@@ -257,31 +261,39 @@ def make_query tablename=nil
   # 6. edit and run
 
 end
-
-# MENU MAIN 
-def main_menu
-  raise 
-  # TODO
-  h = { 
-    :a => :ack,
-    "/" => :ffind,
-    :l => :locate,
-    :v => :viminfo,
-    :z => :z_interface,
-    :d => :child_dirs,
-    :r => :recent_files,
-    :t => :dirtree,
-    "4" => :tree,
-    :s => :sort_menu, 
-    :F => :filter_menu,
-    :c => :command_menu ,
-    :B => :bindkey_ext_command,
-    :M => :newdir,
-    "%" => :newfile,
-    :x => :extras
-  }
-  menu "Main Menu", h
+def new_query
+  db = current_db()
+  tablename = current_tablename()
+  columns = db.columns(tablename)
+  #sql = "SELECT #{columns.join(",")} FROM #{tablename} ;"
+  sql = "SELECT\n#{columns.join(",\n")} \nFROM #{tablename} \nLIMIT 1000\n ;"
+  puts "created sql" if $opt_debug
+  require 'tempfile'
+  tmpfile = Tempfile.new('SQL.XXXXXX')
+  filename = tmpfile.path
+  filename = Shellwords.escape(filename)
+  tmpfile.write(sql)
+  puts "written to #{filename}" if $opt_debug
+  tmpfile.close
+  mtime = File.mtime(filename)
+  puts mtime if $opt_debug
+  command = nil
+  #system "vim #{filename}" and (command = File.open(filename).readlines.join(" ") )
+  system "vim #{filename}" 
+  mtime2 = File.mtime(filename)
+  puts mtime2 if $opt_debug
+  # we are comparing modification times of the file to see if user quit or saved.
+  # vim returns a zero in both cases, unless user quits using :cq
+  return if mtime2 == mtime
+  #puts "not returnig"
+  command = File.open(filename).readlines.join(" ") 
+  if command
+    command = command.gsub("\n", " ")
+    #puts "got : #{command}" if command
+    view_sql command
+  end
 end
+
 def change_database filename=nil
   # add to g_data as visited_dbs
   filename = select_database_name unless filename
@@ -290,7 +302,8 @@ def change_database filename=nil
     tables = db.tables
     $g_data[:filename] = filename
     $g_data[:db] = db
-    $g_data[:tables] = tables
+    #$g_data[:tables] = tables
+    store(:tables, tables)
     $g_data[:visited_dbs] ||= []
     # TODO should be unique. remove if exists, then add
     $g_data[:visited_dbs].delete(filename)
@@ -301,22 +314,23 @@ def change_database filename=nil
   return filename, db, tables
 end
 # get database names
-def getdbname
-  # what about recent ones TODO
-  choices = Dir['*.db','*.sqlite','*.sqlite3'] | $g_data[:visited_dbs]
+def select_database_name
+  # Add recent ones, but remove directory portion if they belong to current dir
+  choices = Dir['*.db','*.sqlite','*.sqlite3'] | $g_data[:visited_dbs].map {|e| e.sub(Dir.pwd + "/","") }
   if choices
     if choices.size == 1
       return File.expand_path(choices.first)
     else
       # select_from is in cli_utils.rb
       #db = select_from "Select database", choices
-      db = ctrlp choices
+      #db = ctrlp choices
+      db = choose choices
       return File.expand_path(db) if db
     end
   end 
   return nil
 end
-alias :select_database_name :getdbname
+#alias :select_database_name :getdbname
 def multi_select_table
   db = $g_data[:db]
   sel_tables = multi_select "select tables ", $g_data[:db].tables
@@ -361,11 +375,17 @@ def select_table tablename=nil
   #pause
   return true
 end
+# store some values against the current database
 def store key, value
-  $g_data[key] = value
+  $g_data[:databases][current_dbname()] ||= {}
+  $g_data[:databases][current_dbname()][key] = value
+  #$g_data[key] = value
 end
+# retrieve some values against the current database
 def fetch key
-  $g_data[key]
+  $g_data[:databases][current_dbname()] ||= {}
+  $g_data[:databases][current_dbname()][key]
+  #$g_data[key]
 end
 def select_columns
   puts "inside select_columns"
@@ -382,6 +402,8 @@ def select_columns
   #puts sel_columns.class
   #p sel_columns
   sel_columns = ['*'] if sel_columns.size == 0
+  # FIXME these should be stored against a specific database and table, otherwise they will cause
+  #  errors
   store ':selected_columns', sel_columns
   puts fetch(':selected_columns')
   return true
@@ -546,6 +568,57 @@ def sql_history
   puts sql
   view_sql sql
 end
+
+# choose from an array. printed vertically no columns, choose number
+def choose array, title=nil, prompt=': '
+
+  pbold title if title
+  array.each_with_index {|e,i| puts "#{i+1} #{e}" }
+  while true
+    print "> \r (Enter 1 to #{array.size}) "
+    choice = $stdin.gets.chomp
+    if choice == "" or choice == "q"
+      return nil
+    end
+    chi = choice.to_i
+    if chi < 1 or chi > array.size
+      next
+    end
+    break
+  end
+  #puts choice
+  return nil if choice == ""
+  k = array[choice.to_i - 1]
+  return k
+end
+  CSI = "\e["
+def OLDchoose array, title=nil, prompt=': '
+
+  # why is save and resutore not working heee
+  $stdout.write "#{CSI}s"     # save cursor position
+  while true
+    pbold title if title
+    array.each_with_index {|e,i| puts "#{i+1} #{e}" }
+    print prompt
+    choice = $stdin.gets.chomp
+    chi = choice.to_i
+    puts chi
+    if choice == "" or choice == "q"
+      return nil
+    end
+    if chi < 1 or chi > array.size
+      puts "restore"
+      $stdout.write "#{CSI}u"     # restore cursor position
+      next
+    end
+    break
+  end
+    #puts choice
+  return nil if choice == ""
+  k = array[choice.to_i - 1]
+  return k
+end
+  
 def view_sql sql
   begin
     view_data current_db, sql, $options
@@ -582,13 +655,17 @@ end
 def current_tablename
   $g_data[:current_tablename]
 end
+# save an sql statement like a bookmark
+# Would have liked to have a nickname for it, or title.
 def save_sql sql=nil
   sql ||= $g_data[:last_sql] 
   $g_data[:databases] ||= {}
   $g_data[:databases][current_dbname()] ||= {}
   $g_data[:databases][current_dbname()][:saved_sqls] ||= []
+  $g_data[:databases][current_dbname()][:saved_sqls].delete sql
   $g_data[:databases][current_dbname()][:saved_sqls] << sql
   $g_data[:databases][current_dbname()][:last_sql] = sql
+  pgreen "Saved sql statement"
 end
 def set_last_sql sql
   $g_data[:last_sql] = sql
@@ -597,6 +674,7 @@ def set_last_sql sql
   $g_data[:databases][current_dbname()] ||= {}
   $g_data[:databases][current_dbname()][:last_sql] = sql
   $g_data[:databases][current_dbname()][:history] ||= []
+  $g_data[:databases][current_dbname()][:history].delete sql
   $g_data[:databases][current_dbname()][:history] << sql
 end
 def edit_last_sql
@@ -629,10 +707,35 @@ def view_sample
   sql = "SELECT * from #{table} LIMIT 100"
   view_sql sql
 end
+# view last 100 inserted rows
 def view_recent
   table = current_tablename()
   sql = current_db().sql_recent_rows(table)
   view_sql sql
+end
+# uses fzf to select an old query
+# fzf messes with quotes, so don't use
+def history_menu
+
+  dbc = config()
+  array = []
+  hist = dbc[:history] || []
+  saved = dbc[:saved_sqls] || []
+  array = saved | hist 
+  unless array
+    perror "No history for this database!"
+    return false
+  end
+  #sql = single_select "Select query: ", array
+  puts "Use up arrow to navigate queries, ^r to search:"
+  command = editline array
+  #command = vared sql, "Edit SQL:"
+  if command.nil? or command.size == 0
+    $quitting = true
+    return false
+  end
+  view_sql command
+  set_last_sql command
 end
 
 
