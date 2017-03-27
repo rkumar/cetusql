@@ -5,12 +5,14 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-27 09:33
+#  Last update: 2017-03-27 16:58
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
-#  - view_schema
+#  + view_schema
 #  - make_query
+#  - menu keeps repeating don't show, can press ENTER or ` to view it
+#  - the menus and hotkeys suck , need to be fixed.
 #  - 
 #  - store history in another file, per database, not one file, getting too large.
 #  + order by is stored, so picked up against wrong database
@@ -241,7 +243,7 @@ def table_menu tablename=nil
     :s => :save_sql,
     :x => :new_query, # DDL no result enter a query and execute
     :h => :history_menu,  # queries for this table
-    :c => :view_schema, # TODO
+    :c => :view_schema, 
     :e => :edit_last_sql,
     :O => :output_to,
     :d => :change_database,
@@ -268,6 +270,9 @@ def new_query
   #sql = "SELECT #{columns.join(",")} FROM #{tablename} ;"
   sql = "SELECT\n#{columns.join(",\n")} \nFROM #{tablename} \nLIMIT 1000\n ;"
   puts "created sql" if $opt_debug
+  edit_execute_in_editor sql
+end
+def edit_execute_in_editor sql
   require 'tempfile'
   tmpfile = Tempfile.new('SQL.XXXXXX')
   filename = tmpfile.path
@@ -290,8 +295,18 @@ def new_query
   if command
     command = command.gsub("\n", " ")
     #puts "got : #{command}" if command
+    puts "..."
     view_sql command
   end
+  set_last_sql command
+end
+
+def view_schema
+  tablename = current_tablename
+  pbold "Schema for #{tablename}"
+  list_metadata tablename
+  indexes_for_table tablename
+  puts
 end
 
 def change_database filename=nil
@@ -332,8 +347,8 @@ def select_database_name
 end
 #alias :select_database_name :getdbname
 def multi_select_table
-  db = $g_data[:db]
-  sel_tables = multi_select "select tables ", $g_data[:db].tables
+  db = current_db
+  sel_tables = multi_select "select tables ", db.tables
   columns = []
   sel_tables.each do |tablename|
     c = db.columns tablename
@@ -343,9 +358,9 @@ def multi_select_table
   #puts sel_columns.size
   #puts sel_columns.class
   sel_columns ||= ['*']
-  sql = "SELECT #{sel_columns.join(",")} FROM #{sel_tables.join(',')} ;"
+  sql = "SELECT #{sel_columns.join(",")} FROM #{sel_tables.join(',')} \nWHERE\n LIMIT 1000\n ;"
   puts sql
-  perror "hit a key"
+  edit_execute_sql sql
   # TODO edit it and view result
   # TODO join based on commond fields, we have that code somewhere
 
@@ -407,19 +422,6 @@ def select_columns
   store ':selected_columns', sel_columns
   puts fetch(':selected_columns')
   return true
-  sql = "SELECT #{sel_columns.join(",")} FROM #{tablename} ;"
-  #puts sql
-
-  #Readline::HISTORY.push(sql) 
-  #command = Readline::readline('>', true)
-  command = vared sql, "Edit SQL:"
-  if command.nil? or command.size == 0
-    $quitting = true
-    return false
-  end
-  view_sql command
-  set_last_sql command
-  return true
 end
 def select_orderby
   db = current_db()
@@ -459,10 +461,21 @@ def run_query
   if o
     sql += " ORDER BY #{o.join(', ')} "
   end
-  sql = vared sql, "Edit SQL: "
-  return if sql.nil? or sql.size == 0
-  set_last_sql sql
-  view_sql sql
+  edit_execute_sql sql
+  #sql = vared sql, "Edit SQL: "
+  #return if sql.nil? or sql.size == 0
+  #set_last_sql sql
+  #view_sql sql
+end
+def edit_execute_sql sql
+  command = vared sql, "Edit SQL:"
+  if command.nil? or command.size == 0
+    return false
+  end
+  puts "..."
+  view_sql command
+  set_last_sql command
+  return true
 end
 def list_tables
   db = current_db()
@@ -681,13 +694,8 @@ def edit_last_sql
   # this can be buggy, if you change database
   #sql =  $g_data[:last_sql]
   sql = $g_data[:databases][current_dbname()][:last_sql]
-  command = vared sql, "Edit SQL:"
-  if command.nil? or command.size == 0
-    $quitting = true
-    return false
-  end
-  view_sql command
-  set_last_sql command
+  #edit_execute_sql sql
+  edit_execute_in_editor sql
 end
 def view_array data
   filename = tabulate data, $options
