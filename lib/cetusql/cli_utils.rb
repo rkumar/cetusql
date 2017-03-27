@@ -6,7 +6,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 14:33
 #      License: MIT
-#  Last update: 2017-03-24 14:00
+#  Last update: 2017-03-26 19:52
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 
@@ -48,8 +48,8 @@ def menu title, h
       ctr += 1
     end
   }
-    print "\n >"
-    #print "\r >"
+  print "\n >"
+  #print "\r >"
   ch = get_char
   puts ch
   #system("clear") # ???
@@ -162,6 +162,9 @@ $kh['[1;2Q']="S-F2"
 def pbold text
   puts "#{BOLD}#{text}#{BOLD_OFF}"
 end
+def pgreen text
+  puts "#{GREEN}#{text}#{CLEAR}"
+end
 def perror text
   puts "#{RED}#{text}#{CLEAR}"
   get_char
@@ -191,6 +194,16 @@ def multi_select title, array
   arr = %x[ echo "#{array.join("\n")}" | fzf --multi --reverse --prompt="#{title} >"]
   return arr.split("\n")
 end
+# single select from an array using fzf
+# CAUTION: this messes with single and double quotes, so don't pass a query in
+def single_select title, array
+  str = %x[ echo "#{array.join("\n")}" | fzf --reverse --prompt="#{title} >" -1 -0 ]
+  return str
+end
+def editline array
+  Readline::HISTORY.push(*array) 
+  command = Readline::readline('>', true)
+end
 
 # allows user to select from list, returning string if user pressed ENTER
 #  Aborts if user presses Q or C-c or ESCAPE
@@ -198,6 +211,7 @@ def ctrlp arr
   patt = nil
   curr = 0
   while true
+    # clear required otherwise will keep drawing itself
     system("clear")
     if patt and patt != ""
       # need fuzzy match here
