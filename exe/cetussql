@@ -5,10 +5,11 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2017-03-27 16:58
+#  Last update: 2017-03-28 08:38
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
+#  - toggle_menu - formatting, columns, no-history, no-indexinfo etc
 #  + view_schema
 #  - make_query
 #  - menu keeps repeating don't show, can press ENTER or ` to view it
@@ -51,7 +52,39 @@ $options[:output_to] = nil
 $options[:formatting] = true
 
 $bindings = {}
-$bindings = {
+$bindings[:db]  = {
+  :t => :select_table,
+  :s => :save_sql,
+  :h => :sql_history,  # databases accessed, tables accessed, sqls issued
+  :m => :multi_select_table,
+  :l => :list_tables,
+  :e => :edit_last_sql,
+  :O => :output_to,
+  :F => :formatting_toggle,
+  :d => :change_database,
+  "UP" => :edit_last_sql,
+  :q => :quit
+}
+$bindings[:table] = {
+  "2".to_sym => :view_all_rows,
+  "3".to_sym => :view_sample,
+  "9".to_sym => :view_recent,
+  "4".to_sym => :select_columns,
+  "5".to_sym => :select_orderby,
+  "6".to_sym => :select_where,
+  "R".to_sym => :run_query,
+  "0".to_sym => :make_query, # TODO
+  :s => :save_sql,
+  :x => :new_query, # DDL no result enter a query and execute
+  :h => :history_menu,  # queries for this table
+  :c => :view_schema, 
+  :e => :edit_last_sql,
+  :O => :output_to,
+  :d => :change_database,
+  "UP" => :edit_last_sql,
+  :q => :quit
+}
+$old_bindings = {
   "`"   => "main_menu",
   "="   => "toggle_menu",
   "!"   => "command_mode",
@@ -142,9 +175,11 @@ def run()
     #tables = db.tables
   #end
   exit unless db
-  #$mode = $current_db
+  $mode = :db
   # TODO populate readline with earlier SQLS for this database
   prompt = ""
+  ch, text = db_menu
+  process_number ch
   
 
   while true
@@ -153,7 +188,7 @@ def run()
     # title
     filename = $g_data[:filename]
     db = $g_data[:db]
-    print "#{GREEN}#{$help}  #{BLUE}cetusql #{VERSION}#{CLEAR}\n"
+    #print "#{GREEN}#{$help}  #{BLUE}cetusql #{VERSION} :#{$mode}#{CLEAR}\n"
     #t = "#{$title}"
     #t = t[t.size-$gcols..-1] if t.size >= $gcols
     #print "#{BOLD}#{t}#{CLEAR}\n"
@@ -161,26 +196,53 @@ def run()
     # schema, count, sample
     # ZZZ XXX
     #print "\r#{_mm}#{$patt} >"
-    ch, text = db_menu
+    ch = text = nil
+    #print "\r:#{$mode} >"
+    print "\r:%-5s >" % [$mode]
+    ch = get_char
+    print ch
+    # TODO
+    # depending on mode, we display menu if tilde pressed, or we process based on tilde
+    ch, text = process_key ch
     puts ch if $opt_debug
-    # TODO all this should not be here
-    chi = ch.to_i
-    if chi > 0 and chi < 10
-      tables = fetch(:tables)
-      tablename = tables[chi - 1]
-      if tablename
-        #puts "selected   #{tables[chi]}  "
-        select_table(tablename)
+    if ch == "`" or ch == "ENTER"
+      if $mode == :table
+        display_menu "Menu #{$mode} for #{current_tablename}", $bindings[$mode]
+      else
+        display_menu "Menu #{$mode} for #{current_dbname}", $bindings[$mode]
       end
     end
-    # TODO if number is < 10 then see if there's a table and select that table
+    if ch == "q" or ch == "ESCAPE" or ch == "C-c"
+      if $mode == :table
+        $mode = :db
+        $g_data[:current_tablename] = nil
+      else
+        break
+      end
+    end
     #puts
-    break if ch == "q" or ch == "ESCAPE" or ch == "C-c"
-    next
+    #break if ch == "q" or ch == "ESCAPE" or ch == "C-c"
   end
   puts "bye"
   $writing = true
   config_write if $writing
+end
+def process_key ch
+  # get correct action map
+  h = $bindings[$mode] || $bindings[:db]
+  binding = h[ch]
+  binding = h[ch.to_sym] unless binding
+  if binding
+    if respond_to?(binding, true)
+      # 2017-03-19 - we can't send return values from a method ??
+      send(binding)
+    end
+  else
+    if $mode == :db
+      process_number ch
+    end
+  end
+  return ch, binding
 end
 def config_write
   $g_data[:db] = nil
@@ -229,6 +291,22 @@ def db_menu
   }
   menu "DB Menu for #{current_dbname}", h
 end
+def process_number ch
+  # this is done in :db mode, to quick select a table, not in table mode since numbers are used
+  #  if number is < 10 then see if there's a table and select that table
+  puts ch if $opt_debug
+  chi = ch.to_i
+  if chi > 0 and chi < 10
+    tables = fetch(:tables)
+    tablename = tables[chi - 1]
+    if tablename
+      pgreen "Selected   #{tablename}  "
+      #
+      select_table(tablename)
+      display_menu "Menu #{$mode} for #{tablename}", $bindings[$mode]
+    end
+  end
+end
 def table_menu tablename=nil
   t = tablename || current_tablename()
   h = {
@@ -254,14 +332,27 @@ def table_menu tablename=nil
 end
 
 # TODO
-def make_query tablename=nil
+# 2017-03-27 - construct a query and run it.
+# actually it should give a submenu
+def make_query 
   # 1. select table if nil
   # 2 select columns for display
   # 3. select order
   # 4. select where
   # 5. select LIMIT
   # 6. edit and run
-
+  tablename = current_tablename()
+  unless tablename
+    # OUCH this went into tablemenu
+    tablename = select_table
+  end
+  puts "Select columns"
+  sel_columns = select_columns
+  puts "Select where condition"
+  where_str   = select_where
+  puts "Select order by"
+  orderby_cols = select_orderby
+  run_query
 end
 def new_query
   db = current_db()
@@ -303,6 +394,7 @@ end
 
 def view_schema
   tablename = current_tablename
+  puts
   pbold "Schema for #{tablename}"
   list_metadata tablename
   indexes_for_table tablename
@@ -317,6 +409,9 @@ def change_database filename=nil
     tables = db.tables
     $g_data[:filename] = filename
     $g_data[:db] = db
+    $mode = :db
+    $g_data[:current_tablename] = nil
+
     #$g_data[:tables] = tables
     store(:tables, tables)
     $g_data[:visited_dbs] ||= []
@@ -366,12 +461,12 @@ def multi_select_table
 
 end
 
-# select a table and then immediately its columns
+# select a table and then puts user into table_menu (that is bad!)
 def select_table tablename=nil
   db = $g_data[:db]
   filename = $g_data[:filename]
   unless tablename
-    tablename = select_from "Select table (#{filename})", db.tables
+    tablename = select_from "Select table from:(#{filename})", db.tables
   end
   unless tablename
     if confirm("Do you wish to quit ? ")
@@ -383,6 +478,8 @@ def select_table tablename=nil
   $g_data[:current_tablename] = tablename
   list_metadata tablename
   indexes_for_table tablename
+  $mode = :table
+  return
   ch = nil
   while ch != 'q'
     ch, text = table_menu tablename
@@ -403,7 +500,7 @@ def fetch key
   #$g_data[key]
 end
 def select_columns
-  puts "inside select_columns"
+  #puts "inside select_columns"
   db = current_db()
   tablename = current_tablename || puts("No table!!")
   columns = db.columns tablename
@@ -421,21 +518,21 @@ def select_columns
   #  errors
   store ':selected_columns', sel_columns
   puts fetch(':selected_columns')
-  return true
+  return sel_columns
 end
 def select_orderby
   db = current_db()
-  tablename = current_tablename || exit
+  tablename = current_tablename || exit(11)
   columns = db.columns tablename
   sel_columns = multi_select "select order by from #{tablename}", columns
   sel_columns = nil if sel_columns.size == 0
   store ':order_by', sel_columns
   puts fetch(':order_by')
-  return true
+  return sel_columns
 end
 def select_where
   db = current_db()
-  tablename = current_tablename || exit
+  tablename = current_tablename || exit(1)
   columns = db.columns tablename
   sel_columns = multi_select "select WHERE from #{tablename}", columns
   sel_columns = nil if sel_columns.size == 0
@@ -444,9 +541,10 @@ def select_where
     s = input "WHERE #{e} "
     a << "#{e} #{s}"
   end
-  store ':where', a.join(" AND ")
+  res = a.join(" AND ")
+  store ':where', res
   puts fetch(':where')
-  return true
+  return res
 end
 def run_query
   t =  current_tablename
@@ -461,7 +559,7 @@ def run_query
   if o
     sql += " ORDER BY #{o.join(', ')} "
   end
-  edit_execute_sql sql
+  edit_execute_in_editor sql
   #sql = vared sql, "Edit SQL: "
   #return if sql.nil? or sql.size == 0
   #set_last_sql sql
@@ -480,6 +578,7 @@ end
 def list_tables
   db = current_db()
   tables = current_db.tables
+  puts
   data = [["#", "Table", "Rows", "Indexed"]]
   ctr = 1
   tables.each do |t|
@@ -744,6 +843,26 @@ def history_menu
   end
   view_sql command
   set_last_sql command
+end
+def display_menu title, h
+  puts "inside display_menu with   #{title}, mode = #{$mode}  " if $opt_debug
+    unless h
+      h = $bindings[:db]
+    end
+  return unless h
+  pbold "#{title}"
+  ctr = 0
+  #h.each_pair { |k, v| puts " #{k}: #{v}" }
+  h.each_pair { |k, v| 
+    print " #{k}: %-20s" % [v]
+    if ctr > 1
+      print "\n"
+      ctr = 0
+    else
+      ctr += 1
+    end
+  }
+  print "\n"
 end
 
 
