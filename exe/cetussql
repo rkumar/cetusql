@@ -4,8 +4,8 @@
 #  Description: Fast database navigator for sqlite
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
-#      License: GPL
-#  Last update: 2017-03-28 08:38
+#      License: MIT
+#  Last update: 2017-03-28 11:00
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
@@ -41,7 +41,7 @@ require 'cetusql/cli_sqlite'
 # -- requires 1.9.3 or higher for io/wait
 # -- cannot do with Highline since we need a timeout on wait, not sure if HL can do that
 
-VERSION="0.0.2"
+VERSION="0.1.0"
 O_CONFIG=true
 CONFIG_FILE=File.expand_path("~/.cetusqlinfo")
 # Using this to store data that has to be used in actions which do not take parameters or return values
@@ -73,7 +73,7 @@ $bindings[:table] = {
   "5".to_sym => :select_orderby,
   "6".to_sym => :select_where,
   "R".to_sym => :run_query,
-  "0".to_sym => :make_query, # TODO
+  "0".to_sym => :make_query, 
   :s => :save_sql,
   :x => :new_query, # DDL no result enter a query and execute
   :h => :history_menu,  # queries for this table
