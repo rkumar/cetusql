@@ -6,7 +6,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 14:33
 #      License: MIT
-#  Last update: 2017-03-26 19:52
+#  Last update: 2017-03-28 23:59
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 
@@ -374,11 +374,20 @@ end
 # print an array in columns
 # default number of columns is 3 and can be supplied. I actually much prefer that this be derived, so we can get more 
     # columns if possible, and te width should be caclulated too
-def print_in_cols a, noc=3
+def print_in_cols a, noc=nil
+  unless noc
+    noc = 3
+    if a.size < 7
+      noc = 1
+    elsif a.size < 15
+      noc = 2
+    end
+  end
+
   x = noc - 1
   cols = a.each_slice((a.size+x)/noc).to_a
   # todo width should be determined based on COLS of screen, and width of data
-  cols.first.zip( *cols[1..-1] ).each{|row| puts row.map{|e| e ? '%-30s' % e : 'XXXXX'}.join("  ") }
+  cols.first.zip( *cols[1..-1] ).each{|row| puts row.map{|e| e ? '%-30s' % e : '     '}.join("  ") }
 end
 ## expects array of arrays
 #class Array
