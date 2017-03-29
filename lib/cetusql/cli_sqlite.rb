@@ -5,7 +5,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-26 12:40
+#  Last update: 2017-03-28 23:44
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
@@ -106,6 +106,51 @@ def tabulate content, options
     system("term-table.rb < #{filename} | sponge #{filename}")
   end
   return filename
+end
+# rather than use external program with dependencies,
+# we generate tabular format for an array with headings
+# TODO check for headings true
+def tabulate2 content, options
+  widths = calculate_column_widths(content, 99)
+  str = "| "
+  sep = "+"
+  widths.each do |w|
+    str << "%-#{w}s | "
+      sep << ("-"*(w+2)) + "+"
+  end
+  data = []
+  data << sep 
+  content.each_with_index {|line, ix| 
+    data << str % line 
+    data << sep if ix == 0
+  }
+  data << sep
+  require 'tempfile'
+  tmpfile = Tempfile.new('SQL.XXXXXX')
+  filename = tmpfile.path
+  #filename = Shellwords.escape(filename)
+  #puts "Writing to #{filename}"
+  tmpfile.write(data.join("\n"))
+  tmpfile.close # need to flush, otherwise write is buffered
+  return filename
+end
+
+def calculate_column_widths content, maxrows=99
+  widths = []
+  content.first.each_with_index {|r,i| widths << calculate_column_width(content, i, maxrows) }
+  return widths
+end
+def calculate_column_width content, col, maxrows=99
+  ret = 1
+  ctr = 0
+  content.each_with_index { |r, i| 
+    break if ctr > maxrows
+    ctr += 1
+    c = r[col]
+    x = c.to_s.length
+    ret = x if x > ret
+  }
+  ret
 end
 class Database
 
