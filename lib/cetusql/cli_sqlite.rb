@@ -5,7 +5,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 17:53
 #      License: MIT
-#  Last update: 2017-03-28 23:44
+#  Last update: 2017-03-29 14:17
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 # ----------------------------------------------------------------------------- #
@@ -50,7 +50,7 @@ end
 # If no outputfile name passed, then use temp table
 # What about STDOUT
 # TODO use temp file, format it there and append to given file only after termtable
-def view_data db, sql, options
+def OLDview_data db, sql, options
   outputfile = options[:output_to]
   formatting = options[:formatting]
   headers = options[:headers]
@@ -90,6 +90,62 @@ def view_data db, sql, options
   tmpfile.close
   tmpfile.unlink
 end
+def view_data db, sql, options
+  outputfile = options[:output_to]
+  formatting = options[:formatting]
+  headers = options[:headers]
+  #str = db.get_data sql
+  rs = db.execute_query sql
+  str = rs.content
+  columns = rs.columns
+  #puts "SQL: #{sql}.\nstr: #{str.size}"
+  #data = []
+  #if headers
+    #data << columns.join("\t")
+  #end
+  #str.each {|line| data << line.join("\t");  }
+  #puts "Rows: #{data.size}"
+  headerstr=nil
+  tmpfile = nil
+  if formatting
+    if headers
+      str.unshift(columns)
+    end
+    filename = tabulate2 str, options
+  else
+    data = []
+    if headers
+      data << columns.join("\t")
+    end
+    str.each {|line| data << line.join("\t");  }
+    tmpfile = mktemp()
+    tmpfile.write(data.join("\n"))
+    tmpfile.close # need to flush, otherwise write is buffered
+    filename = tmpfile.path
+  end
+  if outputfile
+    #puts "comes here"
+    system("cp #{filename} #{outputfile}")
+    filename = outputfile
+  end
+  
+  #system "$EDITOR #{filename}"
+  system "vim -c ':set nowrap' #{filename}"
+  if tmpfile
+    tmpfile.close
+    tmpfile.unlink
+  end
+end
+def mktemp
+  require 'tempfile'
+  tmpfile = Tempfile.new('SQL.XXXXXX')
+  filename = tmpfile.path
+  filename = Shellwords.escape(filename)
+  #puts "Writing to #{filename}"
+  #tmpfile.write(data.join("\n"))
+  #tmpfile.close # need to flush, otherwise write is buffered
+  return tmpfile
+end
 # given content returned by get_data, formats and returns in a file
 def tabulate content, options
   data = []
@@ -109,6 +165,7 @@ def tabulate content, options
 end
 # rather than use external program with dependencies,
 # we generate tabular format for an array with headings
+# returns filename
 # TODO check for headings true
 def tabulate2 content, options
   widths = calculate_column_widths(content, 99)
@@ -116,7 +173,7 @@ def tabulate2 content, options
   sep = "+"
   widths.each do |w|
     str << "%-#{w}s | "
-      sep << ("-"*(w+2)) + "+"
+    sep << ("-"*(w+2)) + "+"
   end
   data = []
   data << sep 
