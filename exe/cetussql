@@ -5,11 +5,12 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: MIT
-#  Last update: 2017-03-29 00:05
+#  Last update: 2017-03-29 20:14
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
 #  - toggle_menu - formatting, columns, no-history, no-indexinfo etc
+#  - define joins, so they can be reused
 #  + view_schema
 #  - make_query
 #  - menu keeps repeating don't show, can press ENTER or ` to view it
@@ -150,7 +151,8 @@ MSCROLL = 10
 $quitting = false
 $modified = $writing = false
 
-$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle    #{BOLD}q#{BOLD_OFF} Quit "
+#$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle    #{BOLD}q#{BOLD_OFF} Quit "
+$help = "#{BOLD}`#{BOLD_OFF} Menu   #{BOLD}=#{BOLD_OFF} Toggle    #{BOLD}q#{BOLD_OFF} Quit "
 
 db = nil
 
@@ -173,7 +175,6 @@ def run()
 
   while true
     i = 0
-    #system("clear")
     # title
     filename = $g_data[:filename]
     db = $g_data[:db]
@@ -196,9 +197,9 @@ def run()
     puts ch if $opt_debug
     if ch == "`" or ch == "ENTER"
       if $mode == :table
-        display_menu "Menu #{$mode} for #{current_tablename}", $bindings[$mode]
+        display_menu "Menu for #{$mode} #{current_tablename}", $bindings[$mode]
       else
-        display_menu "Menu #{$mode} for #{current_dbname}", $bindings[$mode]
+        display_menu "Menu for #{$mode} #{current_dbname}", $bindings[$mode]
       end
     end
     if ch == "q" or ch == "ESCAPE" or ch == "C-c"
@@ -289,10 +290,9 @@ def process_number ch
     tables = fetch(:tables)
     tablename = tables[chi - 1]
     if tablename
-      pgreen "Selected   #{tablename}  "
-      #
+      pgreen "Selected  #{tablename}  "
       select_table(tablename)
-      display_menu "Menu #{$mode} for #{tablename}", $bindings[$mode]
+      display_menu "Menu for #{tablename}", $bindings[$mode]
     end
   end
 end
@@ -407,6 +407,8 @@ def change_database filename=nil
     # TODO should be unique. remove if exists, then add
     $g_data[:visited_dbs].delete(filename)
     $g_data[:visited_dbs] << filename
+    clear_screen
+    puts "#{BLUE}Using #{current_dbname}#{CLEAR}"
     list_tables
     list_indexes
   end
@@ -464,17 +466,13 @@ def select_table tablename=nil
     end
     return
   end
+  clear_screen
+
   $g_data[:current_tablename] = tablename
   list_metadata tablename
   indexes_for_table tablename
   $mode = :table
   return
-  ch = nil
-  while ch != 'q'
-    ch, text = table_menu tablename
-  end
-  #pause
-  return true
 end
 # store some values against the current database
 def store key, value
@@ -605,12 +603,19 @@ def list_indexes
   end
   view_array data
 end
-def indexes_for_table t
+def indexes_for_table table
   db = current_db()
   data = [["Index", "Table", "Column/s"]]
-  sql = %Q{SELECT name, tbl_name, sql FROM sqlite_master WHERE type = "index" and tbl_name =  "#{t}" }
+  sql = %Q{SELECT name, tbl_name, sql FROM sqlite_master WHERE type = "index" and tbl_name =  "#{table}" }
   content = db.get_data sql
-  return if content.nil? or content == []
+  if content.nil? or content == []
+    pred "No indexes for table #{table}"
+    return
+  end
+  title = "Indexes of table: #{table}"
+  puts "-"*title.size
+  pbold title
+  puts "-"*title.size
   content.each do |r|
     if r[-1] != nil
       m = r[-1].match /\((.*)\)/
@@ -626,10 +631,14 @@ def list_metadata table
   db = current_db()
   columns, datatypes = db.get_metadata table
   array = []
-  pbold "Table: #{table}"
+  title = "Columns of table: #{table}"
+  puts "-"*title.size
+  pbold title
+  puts "-"*title.size
+
     columns.each_with_index do |e, ix|
     #print "%-20s %s\n" % [e, datatypes[ix] ]
-    array << "| %-20s| %-8s |" % [e, datatypes[ix] ]
+    array << " %-20s  #{GREEN}%-8s#{CLEAR} " % [e, datatypes[ix] ]
   end
   if false
     array = columnate array, $grows - 7
@@ -751,7 +760,7 @@ def current_db
   $g_data[:db]
 end
 def current_dbname
-  $g_data[:filename]
+  $g_data[:filename] || "WARNING NOT SET: :filename"
 end
 def current_tablename
   $g_data[:current_tablename]
@@ -853,6 +862,12 @@ def display_menu title, h
   }
   print "\n"
 end
+def clear_screen
+  system "clear"
+  t = "#{GREEN}#{$help}  #{BLUE}cetusql #{VERSION}#{CLEAR}"
+  print "#{BOLD}#{t}#{CLEAR}\n"
+end
+  
 
 
 config_read
