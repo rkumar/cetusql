@@ -6,7 +6,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 14:33
 #      License: MIT
-#  Last update: 2017-03-28 23:59
+#  Last update: 2017-03-29 18:05
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 
@@ -166,8 +166,11 @@ def pgreen text
   puts "#{GREEN}#{text}#{CLEAR}"
 end
 def perror text
-  puts "#{RED}#{text}#{CLEAR}"
+  pred text
   get_char
+end
+def pred text
+  puts "#{RED}#{text}#{CLEAR}"
 end
 def pause text=" Press a key ..."
   print text
@@ -261,21 +264,21 @@ def ctrlp arr
   end
 end
 ## CONSTANTS
-GMARK='*'
-CURMARK='>'
-SPACE=" "
+GMARK      = '*'
+CURMARK    = '>'
+SPACE      = " "
 CLEAR      = "\e[0m"
 BOLD       = "\e[1m"
-BOLD_OFF       = "\e[22m"
+BOLD_OFF   = "\e[22m"
 RED        = "\e[31m"
-ON_RED        = "\e[41m"
+ON_RED     = "\e[41m"
 GREEN      = "\e[32m"
 YELLOW     = "\e[33m"
 BLUE       = "\e[1;34m"
 
 ON_BLUE    = "\e[44m"
 REVERSE    = "\e[7m"
-UNDERLINE    = "\e[4m"
+UNDERLINE  = "\e[4m"
 #CURSOR_COLOR = ON_BLUE
 CURSOR_COLOR = CLEAR
 
