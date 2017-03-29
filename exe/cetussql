@@ -5,7 +5,7 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: MIT
-#  Last update: 2017-03-28 11:00
+#  Last update: 2017-03-29 00:05
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
@@ -139,8 +139,6 @@ $old_bindings = {
 
 
 
-$selected_files = Array.new
-$bookmarks = {}
 $mode = nil
 $glines=%x(tput lines).to_i
 $gcols=%x(tput cols).to_i
@@ -148,24 +146,15 @@ $grows = $glines - 3
 $pagesize = 60
 $gviscols = 3
 $pagesize = $grows * $gviscols
-$stact = 0
-$editor_mode = true
 MSCROLL = 10
-$patt=nil
 $quitting = false
 $modified = $writing = false
-## dir stack for popping
-## dirs where some work has been done, for saving and restoring
-$used_dirs = []
-$viewctr = 0
-$history = []
-$sta = $cursor = 0
-$visual_mode = false
 
-$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}Q#{BOLD_OFF} Quit "
+$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle    #{BOLD}q#{BOLD_OFF} Quit "
 
-  ## main loop which calls all other programs
-  db = nil
+db = nil
+
+## main loop which calls all other programs
 def run()
   ctr=0
   filename, db, tables = change_database ARGV[0]
@@ -640,13 +629,13 @@ def list_metadata table
   pbold "Table: #{table}"
     columns.each_with_index do |e, ix|
     #print "%-20s %s\n" % [e, datatypes[ix] ]
-    array << "%-20s %s " % [e, datatypes[ix] ]
+    array << "| %-20s| %-8s |" % [e, datatypes[ix] ]
   end
   if false
-  array = columnate array, $grows - 7
-  array.each {|line| print line, "\n"  }
+    array = columnate array, $grows - 7
+    array.each {|line| print line, "\n"  }
   end
-  print_in_cols array, 3
+  print_in_cols array
   #array.to_table
 
 end
@@ -797,7 +786,7 @@ def edit_last_sql
   edit_execute_in_editor sql
 end
 def view_array data
-  filename = tabulate data, $options
+  filename = tabulate2 data, $options
   puts "Got  #{filename} " if $opt_verbose
   File.open(filename).readlines.each  {|line| puts line}
 end
