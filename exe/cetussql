@@ -5,7 +5,7 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: MIT
-#  Last update: 2017-03-29 20:14
+#  Last update: 2017-03-30 23:13
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
@@ -82,6 +82,7 @@ $bindings[:table] = {
   :e => :edit_last_sql,
   :O => :output_to,
   :d => :change_database,
+  :j => :define_join,
   "UP" => :edit_last_sql,
   :q => :quit
 }
@@ -314,6 +315,7 @@ def table_menu tablename=nil
     :e => :edit_last_sql,
     :O => :output_to,
     :d => :change_database,
+    :j => :define_join,
     "UP" => :edit_last_sql,
     :q => :quit
   }
@@ -451,6 +453,39 @@ def multi_select_table
   # TODO join based on commond fields, we have that code somewhere
 
 end
+def define_join
+  db = current_db
+  tablename = current_tablename()
+
+  sel_table = single_select "select lookup table for join:", db.tables
+  sel_table = sel_table.chomp
+  unless sel_table
+    return
+  end
+  columns = db.columns sel_table
+  sel_columns = multi_select "select columns to join ", columns
+  sel_columns_this = multi_select "select columns from this table ", db.columns( tablename)
+ 
+  str = tablename + "." + sel_columns_this.first + " = " + sel_table + "." + sel_columns.first 
+  puts str
+  ca = sel_columns_this.first
+  cb = sel_columns.first
+  hash_put([:joins, tablename, sel_table, ca, cb])
+   
+  #puts sel_columns.size
+  #puts sel_columns.class
+  # TODO edit it and view result
+  # TODO join based on commond fields, we have that code somewhere
+
+end
+# for current database create hash entries from a heirarchy, like mkdir -p
+def hash_put array
+  h = $g_data[:databases][current_dbname()]
+  array.each do |e|
+    h[e] ||= {}
+    h = h[e]
+  end
+end
 
 # select a table and then puts user into table_menu (that is bad!)
 def select_table tablename=nil
@@ -471,6 +506,7 @@ def select_table tablename=nil
   $g_data[:current_tablename] = tablename
   list_metadata tablename
   indexes_for_table tablename
+  joins_for_table tablename
   $mode = :table
   return
 end
@@ -625,6 +661,24 @@ def indexes_for_table table
     data << row
   end
   view_array data
+end
+def joins_for_table tablename
+  arrow = "->"
+  checkmark = "\u2523"
+  checkmark = "\u279C"
+  db = current_db()
+  h = fetch(:joins)
+  return unless h
+  hj = h[tablename]
+  return unless hj
+  #p hj
+  pbold "Joins for table: #{tablename}"
+  hj.each_pair do |k, v|
+    puts "   #{tablename} -> #{k} "
+    v.each_pair do |k1, v1|
+      puts "     #{checkmark} #{tablename}.#{k1} = #{k}.#{v1.keys.first}"
+    end
+  end
 end
 # if too long split and columnate at 10 rows
 def list_metadata table
