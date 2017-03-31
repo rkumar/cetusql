@@ -5,18 +5,18 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: MIT
-#  Last update: 2017-03-30 23:13
+#  Last update: 2017-03-31 12:31
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
-#  - toggle_menu - formatting, columns, no-history, no-indexinfo etc
+#  - toggle_menu - formatting, columns headers, no-history, no-indexinfo etc
+#  - store history in another file, per database, not one file, getting too large.
+#  - the menus and hotkeys suck , need to be fixed.
 #  - define joins, so they can be reused
 #  + view_schema
 #  - make_query
-#  - menu keeps repeating don't show, can press ENTER or ` to view it
-#  - the menus and hotkeys suck , need to be fixed.
+#  + menu keeps repeating don't show, can press ENTER or ` to view it
 #  - 
-#  - store history in another file, per database, not one file, getting too large.
 #  + order by is stored, so picked up against wrong database
 #  + if headers requested then we have to add them.
 #   last_sql must be for current database not just any. save under this database and retrieve under this database
@@ -202,6 +202,8 @@ def run()
       else
         display_menu "Menu for #{$mode} #{current_dbname}", $bindings[$mode]
       end
+    elsif ch == '='
+      toggle_menu
     end
     if ch == "q" or ch == "ESCAPE" or ch == "C-c"
       if $mode == :table
@@ -281,6 +283,30 @@ def db_menu
     :q => :quit
   }
   menu "DB Menu for #{current_dbname}", h
+end
+def toggle_menu
+  h = { :f => :formatting_toggle, :h => :toggle_headers, :i => :toggle_index_info , "H" => :toggle_history, 
+  :p => :toggle_pager_mode}
+  ch, menu_text = menu "Toggle Menu", h
+  case menu_text
+  when :toggle_headers
+     $options[:headers] = !$options[:headers]
+     pgreen "headers is #{$options[:headers]}"
+  when :toggle_index_info
+     # should index info be printed along with columsn, may take time if many tables
+     $options[:index_info] = !$options[:index_info]
+     pgreen "index_info calculation is #{$options[:index_info]}"
+  when :toggle_history
+     $options[:history_save] = !$options[:history_save]
+     pgreen "Saving SQL history is #{$options[:history_save]}"
+  when :toggle_pager_mode
+    $editor_mode = !$editor_mode
+    if $editor_mode
+      $default_command = nil
+    else
+      $default_command = ENV['MANPAGER'] || ENV['PAGER']
+    end
+  end
 end
 def process_number ch
   # this is done in :db mode, to quick select a table, not in table mode since numbers are used
@@ -807,7 +833,7 @@ def output_to filename=nil
 end
 def formatting_toggle
   $options[:formatting] = !$options[:formatting]
-  puts "Formatting is now #{$options[:formatting]}  "
+  puts "Column formatting is now #{$options[:formatting]}  "
   pause
 end
 def current_db
