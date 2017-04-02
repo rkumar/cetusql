@@ -5,11 +5,16 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: MIT
-#  Last update: 2017-03-31 12:31
+#  Last update: 2017-04-02 12:48
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
-#  - toggle_menu - formatting, columns headers, no-history, no-indexinfo etc
+#  - when in sql menu keep there, the menu of SQL is visible, it looks like we 
+#    are still there.
+#  + toggle_menu - formatting, columns headers, no-history, no-indexinfo etc
+#  - try to get table name or query name in temp file name
+#  - if in db_menu key is unknown then try global menu and remove some options from other menus
+#    - reduce db_menu some options useless unless sql fired. put under SQL menu "s"
 #  - store history in another file, per database, not one file, getting too large.
 #  - the menus and hotkeys suck , need to be fixed.
 #  - define joins, so they can be reused
@@ -55,21 +60,13 @@ $options[:formatting] = true
 $bindings = {}
 $bindings[:db]  = {
   :t => :select_table,
-  :s => :save_sql,
-  :h => :sql_history,  # databases accessed, tables accessed, sqls issued
+  :s => :sql_menu,
   :m => :multi_select_table,
   :l => :list_tables,
-  :e => :edit_last_sql,
-  :O => :output_to,
-  :F => :formatting_toggle,
-  :d => :change_database,
-  "UP" => :edit_last_sql,
   :q => :quit
 }
 $bindings[:table] = {
-  "2".to_sym => :view_all_rows,
-  "3".to_sym => :view_sample,
-  "9".to_sym => :view_recent,
+  :v => :view_menu,
   "4".to_sym => :select_columns,
   "5".to_sym => :select_orderby,
   "6".to_sym => :select_where,
@@ -78,7 +75,6 @@ $bindings[:table] = {
   :s => :save_sql,
   :x => :new_query, # DDL no result enter a query and execute
   :h => :history_menu,  # queries for this table
-  :c => :view_schema, 
   :e => :edit_last_sql,
   :O => :output_to,
   :d => :change_database,
@@ -138,7 +134,6 @@ $old_bindings = {
   "S-F2"   => "tree"
 
 }
-
 
 
 $mode = nil
@@ -268,17 +263,36 @@ def writeYML obj, filename
 end
 
 
-def db_menu
+def sql_menu
+  # check if there is an sql that has been fired, then save_sql and edit_last
+  # if table selected then select columns, order_by where etc
   h = {
-    :t => :select_table,
     :s => :save_sql,
     :h => :sql_history,  # databases accessed, tables accessed, sqls issued
-    :m => :multi_select_table,
-    :l => :list_tables,
     :e => :edit_last_sql,
     :O => :output_to,
     :F => :formatting_toggle,
-    :d => :change_database,
+    :q => :quit
+  }
+  menu "SQL Menu for #{current_dbname}", h
+end
+def view_menu
+  h = {
+  :a => :view_all_rows,
+  :s => :view_sample,
+  :r => :view_recent,
+  :c => :view_schema, 
+  :q => :quit
+  }
+  menu "View Menu for #{current_tablename}", h
+end
+def db_menu
+  h = {
+    :t => :select_table,
+    :m => :multi_select_table,
+    :l => :list_tables,
+    :s => :sql_menu,
+    #:d => :change_database,
     "UP" => :edit_last_sql,
     :q => :quit
   }
@@ -333,7 +347,7 @@ def table_menu tablename=nil
     "5".to_sym => :select_orderby,
     "6".to_sym => :select_where,
     "R".to_sym => :run_query,
-    "0".to_sym => :make_query, # TODO
+    "0".to_sym => :make_query, 
     :s => :save_sql,
     :x => :new_query, # DDL no result enter a query and execute
     :h => :history_menu,  # queries for this table
@@ -360,9 +374,9 @@ def make_query
   # 6. edit and run
   tablename = current_tablename()
   unless tablename
-    # OUCH this went into tablemenu
     tablename = select_table
   end
+  return unless tablename
   puts "Select columns"
   sel_columns = select_columns
   puts "Select where condition"
@@ -435,6 +449,7 @@ def change_database filename=nil
     # TODO should be unique. remove if exists, then add
     $g_data[:visited_dbs].delete(filename)
     $g_data[:visited_dbs] << filename
+    $g_data[:last_sql] = nil
     clear_screen
     puts "#{BLUE}Using #{current_dbname}#{CLEAR}"
     list_tables
@@ -551,7 +566,7 @@ end
 def select_columns
   #puts "inside select_columns"
   db = current_db()
-  tablename = current_tablename || puts("No table!!")
+  tablename = current_tablename || return
   columns = db.columns tablename
   # TODO
   # display columns with datatypes and indexes on them
@@ -585,12 +600,15 @@ def select_where
   columns = db.columns tablename
   sel_columns = multi_select "select WHERE from #{tablename}", columns
   sel_columns = nil if sel_columns.size == 0
-  a = []
-  sel_columns.each do |e|
-    s = input "WHERE #{e} "
-    a << "#{e} #{s}"
+  res = nil
+  if sel_columns
+    a = []
+    sel_columns.each do |e|
+      s = input "WHERE #{e} "
+      a << "#{e} #{s}"
+    end
+    res = a.join(" AND ")
   end
-  res = a.join(" AND ")
   store ':where', res
   puts fetch(':where')
   return res
@@ -856,6 +874,7 @@ def save_sql sql=nil
   $g_data[:databases][current_dbname()][:saved_sqls] << sql
   $g_data[:databases][current_dbname()][:last_sql] = sql
   pgreen "Saved sql statement"
+  $g_data[:last_sql] = nil
 end
 def set_last_sql sql
   $g_data[:last_sql] = sql
