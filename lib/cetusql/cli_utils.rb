@@ -6,7 +6,7 @@
 #       Author: j kepler  http://github.com/mare-imbrium/canis/
 #         Date: 2017-03-18 - 14:33
 #      License: MIT
-#  Last update: 2017-03-29 18:05
+#  Last update: 2017-04-02 19:47
 # ----------------------------------------------------------------------------- #
 #  YFF Copyright (C) 2012-2016 j kepler
 
@@ -20,7 +20,7 @@ def vared var, prompt=">"
     Readline.pre_input_hook = nil
   end
   begin 
-  input = Readline.readline(prompt, false)
+    input = Readline.readline(prompt, false)
   rescue Exception => e
     return nil
   end
@@ -205,7 +205,12 @@ def single_select title, array
 end
 def editline array
   Readline::HISTORY.push(*array) 
-  command = Readline::readline('>', true)
+  begin
+    command = Readline::readline('>', true)
+  rescue Exception => e
+    return nil
+  end
+  return command
 end
 
 # allows user to select from list, returning string if user pressed ENTER
@@ -297,7 +302,13 @@ end
 # readline version of gets
 def input(prompt="", newline=false)
   prompt += "\n" if newline
-  Readline.readline(prompt, true).squeeze(" ").strip
+  ret = nil
+  begin
+    ret = Readline.readline(prompt, true).squeeze(" ").strip
+  rescue Exception => e
+    return nil
+  end
+  return ret
 end
 def agree(prompt="")
   x = input(prompt)
