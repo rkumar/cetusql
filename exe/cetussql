@@ -5,7 +5,7 @@
 #       Author: rkumar
 #         Date: 2013-02-17 - 17:48
 #      License: MIT
-#  Last update: 2017-04-02 12:48
+#  Last update: 2017-04-04 17:09
 # ----------------------------------------------------------------------------- #
 #  cetussql  Copyright (C) 2012-2017 rahul kumar
 #  == TODO
@@ -19,7 +19,7 @@
 #  - the menus and hotkeys suck , need to be fixed.
 #  - define joins, so they can be reused
 #  + view_schema
-#  - make_query
+#  + make_query
 #  + menu keeps repeating don't show, can press ENTER or ` to view it
 #  - 
 #  + order by is stored, so picked up against wrong database
